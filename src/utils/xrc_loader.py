@@ -1,0 +1,79 @@
+# src/utils/xrc_loader.py
+import wx
+import wx.xrc
+import sys
+from pathlib import Path
+from typing import Optional
+
+class XRCLoader:
+    """Загрузчик XRC ресурсов с поддержкой разработки и собранного exe."""
+    
+    def __init__(self):
+        self.res = wx.xrc.XmlResource()
+        self._loaded = False
+    
+    def load(self, xrc_filename: str = "icons.xrc", subdir: str = "icons") -> bool:
+        """Загрузить XRC файл."""
+        if self._loaded:
+            return True
+        
+        # Находим файл
+        xrc_path = self._find_xrc_file(xrc_filename, subdir)
+        if not xrc_path:
+            return False
+        
+        # Загружаем
+        self._loaded = self.res.Load(str(xrc_path))
+        return self._loaded
+    
+    def _find_xrc_file(self, filename: str, subdir: str) -> Optional[Path]:
+        """Поиск XRC файла в разных местах."""
+        
+        # Список мест для поиска
+        search_paths = []
+        
+        # 1. В собранном exe
+        if hasattr(sys, '_MEIPASS'):
+            search_paths.append(Path(sys._MEIPASS) / "resources" / subdir / filename)
+        
+        # 2. В разработке - разные варианты
+        current_file = Path(__file__).resolve()
+        
+        # От текущего файла
+        search_paths.append(current_file.parent.parent.parent / "resources" / subdir / filename)
+        
+        # От корня проекта (если запуск из корня)
+        search_paths.append(Path.cwd() / "resources" / subdir / filename)
+        
+        # Абсолютный путь
+        search_paths.append(Path.home() / "projects" / "transformer_app" / "resources" / subdir / filename)
+        
+        # Проверяем каждый путь
+        for path in search_paths:
+            if path.exists():
+                return path
+        
+        return None
+    
+    def get_bitmap(self, name: str, size: tuple = None) -> wx.Bitmap:
+        """Получить битмап по имени."""
+        if not self._loaded:
+            return wx.NullBitmap
+        
+        bmp = self.res.LoadBitmap(name)
+        if bmp.IsOk() and size:
+            # Ресайзим если нужно
+            img = bmp.ConvertToImage()
+            img = img.Scale(size[0], size[1], wx.IMAGE_QUALITY_HIGH)
+            return wx.Bitmap(img)
+        return bmp
+    
+    def get_icon(self, name: str) -> wx.Icon:
+        """Получить иконку по имени."""
+        if not self._loaded:
+            return wx.NullIcon
+        
+        return self.res.LoadIcon(name)
+
+# Создаем глобальный экземпляр
+xrc = XRCLoader()

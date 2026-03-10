@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resource>
+  <object class="wxBitmap" name="import_icon">import.png</object>
+</resource>
