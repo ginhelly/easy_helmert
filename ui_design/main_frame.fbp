@@ -47,7 +47,7 @@
       <property name="hidden">0</property>
       <property name="id">wxID_ANY</property>
       <property name="maximum_size"></property>
-      <property name="minimum_size"></property>
+      <property name="minimum_size">-1,550</property>
       <property name="name">BaseMainFrame</property>
       <property name="pos"></property>
       <property name="size">1034,621</property>
@@ -118,7 +118,7 @@
             <property name="id">wxID_ANY</property>
             <property name="kind">wxITEM_NORMAL</property>
             <property name="label">Новый расчёт</property>
-            <property name="name">m_menuItem11</property>
+            <property name="name">m_menuItem_new_calc</property>
             <property name="permission">none</property>
             <property name="shortcut">CTRL+N</property>
             <property name="unchecked_bitmap"></property>
@@ -131,7 +131,7 @@
             <property name="id">wxID_ANY</property>
             <property name="kind">wxITEM_NORMAL</property>
             <property name="label">Импорт координат из текстового файла...</property>
-            <property name="name">m_menuItem1</property>
+            <property name="name">m_menuItem_import_txt</property>
             <property name="permission">none</property>
             <property name="shortcut">CTRL+O</property>
             <property name="unchecked_bitmap"></property>
@@ -144,7 +144,7 @@
             <property name="id">wxID_ANY</property>
             <property name="kind">wxITEM_NORMAL</property>
             <property name="label">Импорт калибровки...</property>
-            <property name="name">m_menuItem3</property>
+            <property name="name">m_menuItem_import_calibration</property>
             <property name="permission">none</property>
             <property name="shortcut"></property>
             <property name="unchecked_bitmap"></property>
@@ -296,7 +296,7 @@
           <property name="id">wxID_ANY</property>
           <property name="kind">wxITEM_NORMAL</property>
           <property name="label">Новый расчёт</property>
-          <property name="name">m_tool11</property>
+          <property name="name">m_tool_new_calc</property>
           <property name="permission">protected</property>
           <property name="statusbar">Очистить таблицу и начать новый расчёт</property>
           <property name="tooltip"></property>
@@ -307,7 +307,7 @@
           <property name="id">wxID_ANY</property>
           <property name="kind">wxITEM_NORMAL</property>
           <property name="label">Импорт координат из текстового файла</property>
-          <property name="name">m_tool1</property>
+          <property name="name">m_tool_import_txt</property>
           <property name="permission">protected</property>
           <property name="statusbar">Импорт координат из текстового файла...</property>
           <property name="tooltip"></property>
@@ -318,7 +318,7 @@
           <property name="id">wxID_ANY</property>
           <property name="kind">wxITEM_NORMAL</property>
           <property name="label">Импорт калибровки...</property>
-          <property name="name">m_tool5</property>
+          <property name="name">m_tool_import_calibration</property>
           <property name="permission">protected</property>
           <property name="statusbar">Импорт калибровки из файла контроллера...</property>
           <property name="tooltip"></property>
@@ -1018,7 +1018,7 @@
                           <property name="pressed"></property>
                           <property name="resize">Resizable</property>
                           <property name="show">1</property>
-                          <property name="size"></property>
+                          <property name="size">150,-1</property>
                           <property name="style">wxBU_EXACTFIT</property>
                           <property name="subclass">; ; forward_declare</property>
                           <property name="toolbar_pane">0</property>

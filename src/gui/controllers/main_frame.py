@@ -1,5 +1,5 @@
 import wx
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from core.models import PointPair, CalculationResult
 from gui.forms.easy_helmert_base import BaseMainFrame
@@ -38,7 +38,10 @@ class MainFrame(BaseMainFrame):
         """Создание виджетов, которые нельзя/неудобно делать в FormBuilder."""
 
         # 1. Вставляем CoordinateGrid в placeholder-панель из FormBuilder
-        self.coord_grid = CoordinateGrid(self.m_grid_placeholder)
+        self.coord_grid = CoordinateGrid(
+            self.m_grid_placeholder,
+            on_data_changed=self._on_grid_data_changed
+        )
 
         grid_sizer = wx.BoxSizer(wx.VERTICAL)
         grid_sizer.Add(self.coord_grid, 1, wx.EXPAND)
@@ -70,6 +73,18 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_MENU,  self.on_exit,      self.m_exit_item)
         self.Bind(wx.EVT_CLOSE, self.on_exit)
 
+        # ── Новый расчёт ───────────────────────────────────────────────────
+        self.Bind(wx.EVT_MENU,  self.on_new_calc,  self.m_menuItem_new_calc)
+        self.Bind(wx.EVT_TOOL,  self.on_new_calc,  self.m_tool_new_calc)
+
+        # ── Импорт ────────────────────────────────────────────────────────
+        self.Bind(wx.EVT_MENU, self.on_import_txt,  self.m_menuItem_import_txt)
+        self.Bind(wx.EVT_TOOL, self.on_import_txt,  self.m_tool_import_txt)
+
+        # Импорт калибровки
+        self.Bind(wx.EVT_MENU, self.on_import_calibration, self.m_menuItem_import_calibration)
+        self.Bind(wx.EVT_TOOL, self.on_import_calibration, self.m_tool_import_calibration)
+
         # Кнопки шапки таблицы
         self.Bind(wx.EVT_BUTTON, self.on_add_row,    self.m_btn_add_row)
         self.Bind(wx.EVT_BUTTON, self.on_del_row,    self.m_btn_del_row)
@@ -82,20 +97,15 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_BUTTON, self.on_copy_proj4, self.m_btn_copy_proj4)
         self.Bind(wx.EVT_BUTTON, self.on_save_result,self.m_btn_save_result)
 
-        # Отслеживаем изменение данных в таблице → сбрасываем невязки
-        import wx.grid as gridlib
-        self.coord_grid.Bind(
-            gridlib.EVT_GRID_CELL_CHANGED,
-            self._on_grid_changed
-        )
-
-    def _on_grid_changed(self, event):
+    def _on_grid_data_changed(self):
+        """
+        Вызывается CoordinateGrid при ЛЮБОМ изменении данных:
+        редактирование ячейки, переключение чекбокса, swap, дублирование, удаление.
+        """
         self.is_modified = True
-        from gui.widgets.coordinate_grid import _Col, _READONLY_COLS
-        if event.GetCol() not in _READONLY_COLS:
-            self.coord_grid.clear_residuals()
-            self._set_result_text("")
-        event.Skip()
+        self._set_result_text("")
+        # clear_residuals через CallAfter — чтобы не ломать текущую операцию грида
+        wx.CallAfter(self.coord_grid.clear_residuals)
 
     # ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -114,26 +124,27 @@ class MainFrame(BaseMainFrame):
         self.is_modified = True
 
     def on_calculate(self, event):
-        """Запуск расчёта параметров Гельмерта."""
         raw = self.coord_grid.get_data()
-        if len([r for r in raw if r["enabled"]]) < 4:
+        # get_data() возвращает "enabled_plan" и "enabled_h", а не "enabled"
+        if len([r for r in raw if r["enabled_plan"]]) < 4:
             wx.MessageBox(
                 "Для 7-параметрического преобразования нужно минимум 4 точки.",
                 "Недостаточно данных", wx.OK | wx.ICON_WARNING
             )
             return
 
-        # Преобразуем в PointPair
         try:
-            from core.models import PointPair
             pairs = [
                 PointPair(
-                    name    = r["name"],
-                    x1      = float(r["x1"]),
-                    y1      = float(r["y1"]),
-                    x2      = float(r["x2"]),
-                    y2      = float(r["y2"]),
-                    enabled = r["enabled"],
+                    name         = r["name"],
+                    x1           = float(r["x1"]),
+                    y1           = float(r["y1"]),
+                    h1           = float(r["h1"]) if r["h1"] else None,
+                    x2           = float(r["x2"]),
+                    y2           = float(r["y2"]),
+                    h2           = float(r["h2"]) if r["h2"] else None,
+                    enabled_plan = r["enabled_plan"],
+                    enabled_h    = r["enabled_h"],
                 )
                 for r in raw
             ]
@@ -145,11 +156,6 @@ class MainFrame(BaseMainFrame):
             return
 
         self.point_pairs = pairs
-
-        # TODO: вызов core.transformation.calculate_helmert(pairs)
-        # self.calc_result = calculate_helmert(pairs)
-        # self.update_table(pairs, self.calc_result)
-        # self.update_results(self.calc_result)
         wx.MessageBox("Расчёт: заглушка. Подключи core.transformation.", "Инфо")
 
     def on_copy_wkt(self, event):
@@ -235,19 +241,213 @@ class MainFrame(BaseMainFrame):
     def on_load_file(self, event):
         # TODO
         wx.MessageBox("Загрузка из файла — заглушка", "Инфо")
+    
+    def _ask_save_if_modified(self) -> bool:
+        """
+        Если данные изменены, спрашивает пользователя о сохранении.
+
+        Возвращает:
+            True  — можно продолжать (данные не менялись, либо сохранены,
+                    либо пользователь выбрал «Не сохранять»).
+            False — пользователь нажал «Отмена», операцию надо прервать.
+
+        Использование::
+
+            def on_something(self, event):
+                if not self._ask_save_if_modified():
+                    return          # пользователь передумал
+                ... # выполняем действие
+        """
+        if not self.is_modified:
+            return True
+
+        # Проверяем, есть ли вообще что сохранять
+        if not self.coord_grid.get_data():# not self.point_pairs and not self.coord_grid.get_data():
+            return True
+
+        dlg = wx.MessageDialog(
+            self,
+            "Данные были изменены.\nСохранить перед продолжением?",
+            "Несохранённые изменения",
+            wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION,
+        )
+        result = dlg.ShowModal()
+        dlg.Destroy()
+
+        if result == wx.ID_YES:
+            self.on_save_result(None)
+            return True
+        if result == wx.ID_NO:
+            return True
+        return False   # wx.ID_CANCEL — прерываем операцию
 
     def on_exit(self, event):
-        if self.is_modified and self.point_pairs:
-            dlg = wx.MessageDialog(
-                self, "Данные изменены. Сохранить перед выходом?",
-                "Выход", wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION
+        """Закрытие приложения с проверкой несохранённых данных."""
+        if not self._ask_save_if_modified():
+            return          # пользователь нажал «Отмена» — остаёмся
+        self.Destroy()
+
+    def on_new_calc(self, event):
+        """Новый расчёт: очистить таблицу и результаты."""
+        if not self._ask_save_if_modified():
+            return
+
+        # Сбрасываем таблицу до MIN_ROWS пустых строк
+        self.coord_grid.set_data([])
+        self.coord_grid.clear_residuals()
+
+        # Сбрасываем состояние
+        self.point_pairs  = []
+        self.calc_result  = None
+        self.is_modified  = False
+
+        # Очищаем панель результатов
+        self._set_result_text("")
+
+    def on_import_txt(self, event):
+        """Импорт координат из текстового файла — добавление и обновление точек."""
+        with wx.FileDialog(
+            self,
+            "Открыть файл с координатами",
+            wildcard=(
+                "Текстовые файлы (*.txt;*.csv;*.tsv)|*.txt;*.csv;*.tsv"
+                "|Все файлы (*.*)|*.*"
+            ),
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
+        ) as file_dlg:
+            if file_dlg.ShowModal() == wx.ID_CANCEL:
+                return
+            filepath = file_dlg.GetPath()
+
+        from gui.dialogs.import_dialog import ImportDialog
+        with ImportDialog(self, filepath) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            imported = dlg.get_import_data()
+
+        if not imported:
+            wx.MessageBox(
+                "Нет данных для импорта — возможно, не назначен ни один столбец\n"
+                "или файл пустой.",
+                "Импорт",
+                wx.OK | wx.ICON_INFORMATION,
             )
-            res = dlg.ShowModal()
-            dlg.Destroy()
-            if res == wx.ID_YES:
-                self.on_save_result(None)
-                self.Destroy()
-            elif res == wx.ID_NO:
-                self.Destroy()
-        else:
-            self.Destroy()
+            return
+
+        n_added, n_updated = self._merge_imported_data(imported)
+
+        self.is_modified = True
+        self.coord_grid.clear_residuals()
+        self._set_result_text("")
+
+        wx.MessageBox(
+            f"Импорт завершён:\n"
+            f"  • обновлено точек: {n_updated}\n"
+            f"  • добавлено точек: {n_added}",
+            "Импорт завершён",
+            wx.OK | wx.ICON_INFORMATION,
+        )
+
+    def _merge_imported_data(self, imported: List[dict]) -> tuple[int, int]:
+        """
+        Сливает импортированные строки с текущим содержимым таблицы.
+
+        Правила слияния:
+        - Ключ совпадения — поле «name».
+        - Обновляются только непустые поля из импорта.
+        - Флаги enabled_plan / enabled_h обновляются, если присутствуют в импорте
+            (текстовый импорт через ImportDialog их не содержит — там они не трогаются).
+        - Если несколько строк с одним именем — обновляются все.
+        - Новые точки добавляются в конец.
+        - Минимум MIN_ROWS строк гарантирует coord_grid.set_data().
+        """
+        _COORD_KEYS = ("x1", "y1", "h1", "x2", "y2", "h2")
+        _FLAG_KEYS  = ("enabled_plan", "enabled_h")
+
+        current: List[dict] = self.coord_grid.get_data()
+
+        name_idx: Dict[str, List[int]] = {}
+        for i, row in enumerate(current):
+            name = row.get("name", "").strip()
+            if name:
+                name_idx.setdefault(name, []).append(i)
+
+        n_added, n_updated = 0, 0
+        new_rows: List[dict] = []
+
+        for imp in imported:
+            imp_name = imp.get("name", "").strip()
+            if not imp_name:
+                continue
+
+            if imp_name in name_idx:
+                for idx in name_idx[imp_name]:
+                    # Обновляем координатные поля (только непустые)
+                    for key in _COORD_KEYS:
+                        val = imp.get(key, "")
+                        if val:
+                            current[idx][key] = val
+                    # Обновляем флаги включения (только если явно заданы в импорте)
+                    for flag in _FLAG_KEYS:
+                        if flag in imp:
+                            current[idx][flag] = imp[flag]
+                n_updated += 1
+            else:
+                blank: dict = {
+                    "enabled_plan": imp.get("enabled_plan", True),
+                    "enabled_h":    imp.get("enabled_h",    True),
+                    "name": imp_name,
+                    "x1": "", "y1": "", "h1": "",
+                    "x2": "", "y2": "", "h2": "",
+                }
+                for key in _COORD_KEYS:
+                    if imp.get(key):
+                        blank[key] = imp[key]
+                name_idx[imp_name] = [len(current) + len(new_rows)]
+                new_rows.append(blank)
+                n_added += 1
+
+        self.coord_grid.set_data(current + new_rows)
+        return n_added, n_updated
+    
+    def on_import_calibration(self, event):
+        """Импорт файла калибровки геодезического контроллера."""
+        from core.calibration_importers import (
+            load_calibration_file, UnsupportedFormatError, WILDCARD
+        )
+
+        with wx.FileDialog(
+            self,
+            "Открыть файл калибровки",
+            wildcard=WILDCARD,
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
+        ) as dlg:
+            if dlg.ShowModal() == wx.ID_CANCEL:
+                return
+            filepath = dlg.GetPath()
+
+        try:
+            points = load_calibration_file(filepath)
+        except UnsupportedFormatError as e:
+            wx.MessageBox(str(e), "Неподдерживаемый формат",
+                        wx.OK | wx.ICON_WARNING, self)
+            return
+        except (ValueError, IOError) as e:
+            wx.MessageBox(str(e), "Ошибка импорта",
+                        wx.OK | wx.ICON_ERROR, self)
+            return
+
+        imported = [pt.to_dict() for pt in points]
+        n_added, n_updated = self._merge_imported_data(imported)
+
+        self.is_modified = True
+        self.coord_grid.clear_residuals()
+        self._set_result_text("")
+
+        wx.MessageBox(
+            f"Импорт завершён:\n"
+            f"  • обновлено точек: {n_updated}\n"
+            f"  • добавлено точек: {n_added}",
+            "Импорт калибровки",
+            wx.OK | wx.ICON_INFORMATION,
+        )

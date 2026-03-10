@@ -19,22 +19,22 @@ class BaseMainFrame ( wx.Frame ):
     def __init__( self, parent ):
         wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Easy Helmert", pos = wx.DefaultPosition, size = wx.Size( 1034,621 ), style = wx.DEFAULT_FRAME_STYLE|wx.RESIZE_BORDER|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
 
-        self.SetSizeHints( wx.DefaultSize, wx.DefaultSize )
+        self.SetSizeHints( wx.Size( -1,550 ), wx.DefaultSize )
         self.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_HIGHLIGHTTEXT ) )
 
         self.m_statusBar1 = self.CreateStatusBar( 1, wx.STB_SIZEGRIP, wx.ID_ANY )
         self.m_menubar1 = wx.MenuBar( 0 )
         self.m_menu1 = wx.Menu()
-        self.m_menuItem11 = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Новый расчёт"+ u"\t" + u"CTRL+N", wx.EmptyString, wx.ITEM_NORMAL )
-        self.m_menuItem11.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_NEW,  ) )
-        self.m_menu1.Append( self.m_menuItem11 )
+        self.m_menuItem_new_calc = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Новый расчёт"+ u"\t" + u"CTRL+N", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menuItem_new_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_NEW,  ) )
+        self.m_menu1.Append( self.m_menuItem_new_calc )
 
-        self.m_menuItem1 = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Импорт координат из текстового файла..."+ u"\t" + u"CTRL+O", wx.EmptyString, wx.ITEM_NORMAL )
-        self.m_menuItem1.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FILE_OPEN,  ) )
-        self.m_menu1.Append( self.m_menuItem1 )
+        self.m_menuItem_import_txt = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Импорт координат из текстового файла..."+ u"\t" + u"CTRL+O", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menuItem_import_txt.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FILE_OPEN,  ) )
+        self.m_menu1.Append( self.m_menuItem_import_txt )
 
-        self.m_menuItem3 = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Импорт калибровки...", wx.EmptyString, wx.ITEM_NORMAL )
-        self.m_menu1.Append( self.m_menuItem3 )
+        self.m_menuItem_import_calibration = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Импорт калибровки...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu1.Append( self.m_menuItem_import_calibration )
 
         self.m_menu1.AppendSeparator()
 
@@ -68,11 +68,11 @@ class BaseMainFrame ( wx.Frame ):
         self.m_toolbar = self.CreateToolBar( wx.TB_HORIZONTAL, wx.ID_ANY )
         self.m_toolbar.AddSeparator()
 
-        self.m_tool11 = self.m_toolbar.AddTool( wx.ID_ANY, u"Новый расчёт", wx.ArtProvider.GetBitmap( wx.ART_NEW,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Очистить таблицу и начать новый расчёт", None )
+        self.m_tool_new_calc = self.m_toolbar.AddTool( wx.ID_ANY, u"Новый расчёт", wx.ArtProvider.GetBitmap( wx.ART_NEW,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Очистить таблицу и начать новый расчёт", None )
 
-        self.m_tool1 = self.m_toolbar.AddTool( wx.ID_ANY, u"Импорт координат из текстового файла", wx.ArtProvider.GetBitmap( wx.ART_FILE_OPEN,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Импорт координат из текстового файла...", None )
+        self.m_tool_import_txt = self.m_toolbar.AddTool( wx.ID_ANY, u"Импорт координат из текстового файла", wx.ArtProvider.GetBitmap( wx.ART_FILE_OPEN,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Импорт координат из текстового файла...", None )
 
-        self.m_tool5 = self.m_toolbar.AddTool( wx.ID_ANY, u"Импорт калибровки...", wx.ArtProvider.GetBitmap( wx.ART_ADD_BOOKMARK,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Импорт калибровки из файла контроллера...", None )
+        self.m_tool_import_calibration = self.m_toolbar.AddTool( wx.ID_ANY, u"Импорт калибровки...", wx.ArtProvider.GetBitmap( wx.ART_ADD_BOOKMARK,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Импорт калибровки из файла контроллера...", None )
 
         self.m_toolbar.AddSeparator()
 
@@ -136,7 +136,7 @@ class BaseMainFrame ( wx.Frame ):
         self.m_staticline11 = wx.StaticLine( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_VERTICAL )
         bSizerTableHeader.Add( self.m_staticline11, 0, wx.EXPAND |wx.ALL, 5 )
 
-        self.m_btn_calc = wx.Button( self.m_panel_input, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.DefaultSize, wx.BU_EXACTFIT )
+        self.m_btn_calc = wx.Button( self.m_panel_input, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.Size( 150,-1 ), wx.BU_EXACTFIT )
 
         self.m_btn_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
         self.m_btn_calc.SetMinSize( wx.Size( 150,-1 ) )

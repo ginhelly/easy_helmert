@@ -22,6 +22,8 @@ import wx
 import wx.grid as gridlib
 from typing import List, Optional, Tuple
 
+from gui.utils.dms import _try_dms_to_dd, _DMS_TYPEABLE_CHARS
+
 
 # ── Локаль и нормализация чисел ───────────────────────────────────────────────
 
@@ -32,6 +34,20 @@ def _sys_dec_sep() -> str:
         return sep if sep in (".", ",") else "."
     except Exception:
         return "."
+
+def _parse_coordinate(raw: str, dec_sep: str) -> str:
+    """
+    Универсальная нормализация значения в числовой ячейке координат:
+      1. Пробует DMS → DD конвертацию.
+      2. Если не DMS — стандартная числовая нормализация (_normalize_number).
+
+    Используется вместо _normalize_number для всех столбцов _EDITABLE_NUM.
+    """
+    raw = raw.strip()
+    if not raw:
+        return raw
+    dms = _try_dms_to_dd(raw, dec_sep)
+    return dms if dms is not None else _normalize_number(raw, dec_sep)
 
 
 def _normalize_number(raw: str, dec_sep: str) -> str:
@@ -130,10 +146,12 @@ class CoordinateGrid(gridlib.Grid):
 
     MIN_ROWS = 3
 
-    def __init__(self, parent: wx.Window, **kwargs):
+    def __init__(self, parent: wx.Window, on_data_changed=None, **kwargs):
         super().__init__(parent, **kwargs)
         self._busy    = False          # флаг «идёт массовое обновление»
         self._dec_sep = _sys_dec_sep() # системный разделитель
+        self._on_data_changed   = on_data_changed   
+        self._text_editor_ctrl = None
         self._setup_grid()
         self._bind_events()
 
@@ -252,12 +270,41 @@ class CoordinateGrid(gridlib.Grid):
         self.Bind(wx.EVT_SIZE,                       self._on_size)
         self.Bind(gridlib.EVT_GRID_CELL_RIGHT_CLICK,  self._on_right_click)
         self.Bind(gridlib.EVT_GRID_LABEL_RIGHT_CLICK, self._on_right_click)
+    
+    def _notify_changed(self):
+        """
+        Вызывается при любом изменении данных пользователем.
+        Уведомляет владельца (main_frame) через переданный callback.
+        """
+        if callable(self._on_data_changed):
+            self._on_data_changed()
 
     # Одиночный клик → сразу в режим редактирования (не двойной)
     def _on_select_cell(self, event):
         event.Skip()
-        if event.GetCol() not in _CHECKBOX_COLS:
+        col = event.GetCol()
+        if col not in _CHECKBOX_COLS:
             wx.CallAfter(self._safe_enable_edit)
+            #wx.CallAfter(self._rebind_editor_filter, col)   # ← каждый раз перепривязываем
+
+    def _rebind_editor_filter(self, col: int):
+        """
+        Перепривязывает числовой фильтр к кэшированному TextCtrl
+        в зависимости от текущего столбца.
+
+        Вызывается при каждом переходе между ячейками, чтобы компенсировать
+        переиспользование редактора wxGrid.
+        """
+        return
+        if not self or self._text_editor_ctrl is None:
+            return
+        try:
+            ctrl = self._text_editor_ctrl
+            ctrl.Unbind(wx.EVT_CHAR, handler=self._on_numeric_char)
+            if col in _EDITABLE_NUM:
+                ctrl.Bind(wx.EVT_CHAR, self._on_numeric_char)
+        except Exception:
+            pass
 
     def _safe_enable_edit(self):
         if self and not self.IsCellEditControlEnabled():
@@ -270,26 +317,32 @@ class CoordinateGrid(gridlib.Grid):
             cur = self.GetCellValue(row, col)
             self.SetCellValue(row, col, "" if cur == "1" else "1")
             self.ForceRefresh()
+            self._notify_changed()
             return   # НЕ Skip — редактор не открывается
         event.Skip()
 
     # Нормализация после сохранения ячейки
     def _on_cell_changed(self, event):
+        self._notify_changed()
         row, col = event.GetRow(), event.GetCol()
         if col in _EDITABLE_NUM:
             raw        = self.GetCellValue(row, col)
-            normalized = _normalize_number(raw, self._dec_sep)
-            if normalized != raw:
-                wx.CallAfter(self.SetCellValue, row, col, normalized)
+            try:
+                normalized = _parse_coordinate(raw, self._dec_sep)  # ← было _normalize_number
+                if normalized != raw:
+                    wx.CallAfter(self.SetCellValue, row, col, normalized)
+            except Exception:
+                pass
         event.Skip()
 
     # Привязка char-фильтра к текстовому контролу редактора
     def _on_editor_created(self, event):
-        col = event.GetCol()
-        if col in _EDITABLE_NUM:
-            ctrl = event.GetControl()
-            if ctrl:
-                ctrl.Bind(wx.EVT_CHAR, self._on_numeric_char)
+        ctrl = event.GetControl()
+        if ctrl:
+            self._text_editor_ctrl = ctrl
+            # Привязываем фильтр один раз навсегда.
+            # Какой столбец сейчас редактируется — проверяется внутри фильтра.
+            ctrl.Bind(wx.EVT_CHAR, self._on_numeric_char)
         event.Skip()
 
     def _on_numeric_char(self, event):
@@ -298,19 +351,22 @@ class CoordinateGrid(gridlib.Grid):
         пропускает цифры, оба разделителя, ведущий минус,
         управляющие клавиши и Ctrl/Alt-комбинации.
         """
+        # Если это нечисловой столбец — пропускаем всё без проверок
+        col = self.GetGridCursorCol()
+        if col not in _EDITABLE_NUM:
+            event.Skip()
+            return
+
         key = event.GetKeyCode()
 
-        # Ctrl / Alt — не трогаем (Ctrl+C, Ctrl+V и т.д.)
         if event.ControlDown() or event.AltDown():
             event.Skip()
             return
 
-        # Управляющие коды < SPACE (Backspace=8, Tab=9, Enter=13…)
         if key < wx.WXK_SPACE:
             event.Skip()
             return
 
-        # Явные навигационные клавиши
         if key in (
             wx.WXK_DELETE, wx.WXK_BACK,
             wx.WXK_LEFT,   wx.WXK_RIGHT,
@@ -320,17 +376,16 @@ class CoordinateGrid(gridlib.Grid):
             event.Skip()
             return
 
-        # Numpad: цифры (WXK_NUMPAD0 … WXK_NUMPAD9)
         if _NUMPAD0 <= key <= _NUMPAD9:
             event.Skip()
             return
 
-        # Numpad: десятичная точка/запятая
         if key == _NUMPAD_DEC:
             event.Skip()
             return
 
-        # Не-ASCII — блокируем (функциональные клавиши и т.п.)
+        # Unicode DMS-символы > 255 (∘ ′ ″ 度 分 秒 …) через EVT_CHAR не приходят —
+        # они обрабатываются только в _paste_clipboard. Блокируем.
         if key > 255:
             return
 
@@ -340,21 +395,25 @@ class CoordinateGrid(gridlib.Grid):
             event.Skip()
             return
 
-        # Оба разделителя разрешены — нормализуются в _on_cell_changed
-        if ch in (".", ","):
+        if ch in ('.', ','):
             event.Skip()
             return
 
-        # Минус только в начале строки и если минуса ещё нет
-        if ch == "-":
+        # ✅ DMS-символы: °, ', ", `, ´, *, пробел, N/S/E/W
+        if ch in _DMS_TYPEABLE_CHARS:
+            event.Skip()
+            return
+
+        # Минус только в начале строки
+        if ch == '-':
             ctrl = event.GetEventObject()
-            if hasattr(ctrl, "GetInsertionPoint") and hasattr(ctrl, "GetValue"):
+            if hasattr(ctrl, 'GetInsertionPoint') and hasattr(ctrl, 'GetValue'):
                 pos = ctrl.GetInsertionPoint()
                 val = ctrl.GetValue()
                 sel = ctrl.GetSelection()
                 at_start     = (pos == 0)
                 all_selected = (sel[0] == 0 and sel[1] == len(val))
-                no_minus_yet = "-" not in val
+                no_minus_yet = '-' not in val
                 if (at_start or all_selected) and no_minus_yet:
                     event.Skip()
             return
@@ -426,11 +485,12 @@ class CoordinateGrid(gridlib.Grid):
                     v = val.strip().lower()
                     self.SetCellValue(row, col, "" if v in ("0", "false", "") else "1")
                 elif col in _NUMERIC_COLS:
-                    self.SetCellValue(row, col, _normalize_number(val, self._dec_sep))
+                    self.SetCellValue(row, col, _parse_coordinate(val, self._dec_sep))
                 else:
                     self.SetCellValue(row, col, val.strip())
 
         self.ForceRefresh()
+        self._notify_changed()
 
     def _copy_clipboard(self):
         """Копирование выделенного блока в TSV (совместимо с Excel)."""
@@ -469,6 +529,7 @@ class CoordinateGrid(gridlib.Grid):
             if col not in _READONLY_COLS:
                 self.SetCellValue(row, col, "")
         self.ForceRefresh()
+        self._notify_changed()
 
     # ── Публичное API ─────────────────────────────────────────────────────────
 
@@ -479,6 +540,7 @@ class CoordinateGrid(gridlib.Grid):
         self._init_row(row)
         self.MakeCellVisible(row, 0)
         self.SetGridCursor(row, _Col.NAME)
+        self._notify_changed()
 
     def delete_selected_rows(self, rows: List[int] = None):
         """Удалить строки. Если rows=None — берёт выделение / курсор."""
@@ -494,6 +556,7 @@ class CoordinateGrid(gridlib.Grid):
                 self.SetCellValue(row, _Col.USE_PLAN, "1")
                 self.SetCellValue(row, _Col.USE_H,    "1")
         self.ForceRefresh()
+        self._notify_changed()
 
     # ── Контекстное меню ──────────────────────────────────────────────────────
 
@@ -641,6 +704,7 @@ class CoordinateGrid(gridlib.Grid):
             self.MakeCellVisible(insert_pos, 0)
 
         self.ForceRefresh()
+        self._notify_changed()
 
     def swap_source_xy(self, rows: List[int] = None):
         """Меняет X₁ ↔ Y₁. Если rows=None — во всех строках."""
@@ -652,6 +716,7 @@ class CoordinateGrid(gridlib.Grid):
             self.SetCellValue(row, _Col.X1, y)
             self.SetCellValue(row, _Col.Y1, x)
         self.ForceRefresh()
+        self._notify_changed()
 
     def swap_target_xy(self, rows: List[int] = None):
         """Меняет X₂ ↔ Y₂. Если rows=None — во всех строках."""
@@ -663,6 +728,7 @@ class CoordinateGrid(gridlib.Grid):
             self.SetCellValue(row, _Col.X2, y)
             self.SetCellValue(row, _Col.Y2, x)
         self.ForceRefresh()
+        self._notify_changed()
 
     def set_data(self, data: List[dict]):
         """
@@ -700,6 +766,7 @@ class CoordinateGrid(gridlib.Grid):
 
         self._busy = False
         self.ForceRefresh()
+        self._notify_changed()
 
     def get_data(self) -> List[dict]:
         """
