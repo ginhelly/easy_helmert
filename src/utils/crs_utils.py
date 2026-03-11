@@ -7,8 +7,15 @@ from typing import Dict, List, Optional, Tuple
 
 from pyproj import CRS, Transformer
 
+from core.models import TransformationParams
+
 
 # ── Базовые утилиты ───────────────────────────────────────────────────────────
+
+def base_crs(crs: CRS) -> CRS:
+    """Bound CRS → source_crs (убираем встроенный TOWGS84)."""
+    return crs.source_crs if crs.type_name == "Bound CRS" else crs
+
 
 def get_geodetic_crs(crs: CRS) -> CRS:
     return crs.geodetic_crs
@@ -192,3 +199,49 @@ def describe_crs(crs: CRS) -> str:
         pass
 
     return "\n".join(lines)
+
+def make_bound_crs(source_crs: CRS, params: TransformationParams) -> CRS:
+    """
+    Создаёт Bound CRS: исходная СК + вычисленные параметры TOWGS84.
+
+    Используется для экспорта WKT/Proj4 с вшитыми параметрами перехода.
+    Если source_crs сам является Bound CRS (содержал +towgs84) —
+    старые параметры заменяются новыми.
+
+    Параметры TOWGS84 в стандартных единицах:
+      dx, dy, dz   — метры
+      rx, ry, rz   — угловые секунды  (params.rx_sec / ry_sec / rz_sec)
+      ds           — ppm               (params.scale_ppm)
+    """
+    import re
+
+    base = base_crs(source_crs)   # снимаем старый Bound если был
+
+    towgs84_values = (
+        f"{params.dx:.6f},{params.dy:.6f},{params.dz:.6f},"
+        f"{params.rx_sec:.8f},{params.ry_sec:.8f},{params.rz_sec:.8f},"
+        f"{params.scale_ppm:.8f}"
+    )
+
+    # Попытка 1: через to_dict() — сохраняет все параметры проекции точнее
+    try:
+        d = base.to_dict()
+        d["towgs84"] = [
+            params.dx,        params.dy,        params.dz,
+            params.rx_sec,    params.ry_sec,    params.rz_sec,
+            params.scale_ppm,
+        ]
+        return CRS.from_dict(d)
+    except Exception:
+        pass
+
+    # Попытка 2: через proj4-строку
+    try:
+        proj4 = base.to_proj4()
+        proj4 = re.sub(r"\+towgs84=\S+", "", proj4).strip()
+        proj4 += f" +towgs84={towgs84_values}"
+        return CRS.from_user_input(proj4)
+    except Exception as e:
+        raise RuntimeError(
+            f"Не удалось создать Bound CRS из исходной СК:\n{e}"
+        ) from e

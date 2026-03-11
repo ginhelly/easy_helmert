@@ -61,6 +61,7 @@ class MainFrame(BaseMainFrame):
         # 3. Целевая СК по умолчанию — WGS 84 (3D)
         self.source_crs = None
         self.target_crs = CRS.from_epsg(4979)
+        self.result_crs = None
         self.m_lbl_tgt_crs.SetLabel("WGS 84 [EPSG:4979]")
 
     def _setup_layout(self):
@@ -135,13 +136,51 @@ class MainFrame(BaseMainFrame):
 
     def on_calculate(self, event):
         raw = self.coord_grid.get_data()
-        # get_data() возвращает "enabled_plan" и "enabled_h", а не "enabled"
-        if len([r for r in raw if r["enabled_plan"]]) < 4:
+
+        valid_raw = [
+            r for r in raw
+            if r.get("x1") and r.get("y1")
+            and r.get("x2") and r.get("y2")
+        ]
+
+        # Считаем уравнения здесь же, чтобы показать понятную ошибку до вызова ядра
+        n_eq = sum(
+            (2 if r["enabled_plan"] else 0) + (1 if r["enabled_h"] else 0)
+            for r in valid_raw
+        )
+        if n_eq < 7:
             wx.MessageBox(
-                "Для 7-параметрического преобразования нужно минимум 4 точки.",
-                "Недостаточно данных", wx.OK | wx.ICON_WARNING
+                "Недостаточно данных.\n\n"
+                "Минимальные варианты:\n"
+                "  • 3 точки с планом и высотой\n"
+                "  • 4 точки только с планом\n"
+                "  • 3 плановых + 1 высотная\n\n"
+                f"Сейчас доступно уравнений: {n_eq} из 7.",
+                "Недостаточно данных",
+                wx.OK | wx.ICON_WARNING,
             )
             return
+
+        if not getattr(self, "source_crs", None):
+            wx.MessageBox("Задайте исходную систему координат.",
+                        "Нет исходной СК", wx.OK | wx.ICON_WARNING)
+            return
+
+        if not getattr(self, "target_crs", None):
+            wx.MessageBox("Задайте целевую систему координат.",
+                        "Нет целевой СК", wx.OK | wx.ICON_WARNING)
+            return
+
+        # Предупреждение о малом числе точек (решение есть, но невязки неинформативны)
+        if n_eq < 12:
+            if wx.MessageBox(
+                f"Доступно уравнений: {n_eq} (рекомендуется ≥ 12).\n"
+                "Невязки по активным точкам будут близки к нулю.\n\n"
+                "Продолжить?",
+                "Мало данных",
+                wx.YES_NO | wx.ICON_QUESTION,
+            ) != wx.YES:
+                return
 
         try:
             pairs = [
@@ -149,24 +188,69 @@ class MainFrame(BaseMainFrame):
                     name         = r["name"],
                     x1           = float(r["x1"]),
                     y1           = float(r["y1"]),
-                    h1           = float(r["h1"]) if r["h1"] else None,
+                    h1           = float(r["h1"]) if r.get("h1") else None,
                     x2           = float(r["x2"]),
                     y2           = float(r["y2"]),
-                    h2           = float(r["h2"]) if r["h2"] else None,
+                    h2           = float(r["h2"]) if r.get("h2") else None,
                     enabled_plan = r["enabled_plan"],
                     enabled_h    = r["enabled_h"],
                 )
-                for r in raw
+                for r in valid_raw
             ]
         except ValueError as e:
-            wx.MessageBox(
-                f"Ошибка в данных таблицы:\n{e}",
-                "Ошибка", wx.OK | wx.ICON_ERROR
-            )
+            wx.MessageBox(f"Ошибка в данных таблицы:\n{e}",
+                        "Ошибка", wx.OK | wx.ICON_ERROR)
             return
 
+        from core.transformation import calculate_helmert
+        try:
+            result = calculate_helmert(pairs, self.source_crs, self.target_crs)
+        except Exception as e:
+            wx.MessageBox(f"Ошибка расчёта:\n{e}", "Ошибка", wx.OK | wx.ICON_ERROR)
+            return
+
+        self.calc_result = result
         self.point_pairs = pairs
-        wx.MessageBox("Расчёт: заглушка. Подключи core.transformation.", "Инфо")
+
+        # Разворачиваем невязки на все строки таблицы
+        # valid_raw и result.residuals имеют одинаковую длину
+        all_residuals = [None] * len(raw)
+        j = 0
+        for i, r in enumerate(raw):
+            if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
+                all_residuals[i] = result.residuals[j]
+                j += 1
+
+        self.coord_grid.update_residuals(all_residuals)
+        self.update_results(result)
+
+        # Формируем результирующую СК с вшитыми параметрами TOWGS84
+        try:
+            from utils.crs_utils import make_bound_crs
+            self.result_crs = make_bound_crs(self.source_crs, result.params)
+        except Exception as e:
+            self.result_crs = None
+            wx.MessageBox(
+                f"Параметры вычислены, но создать результирующую СК не удалось:\n{e}",
+                "Предупреждение", wx.OK | wx.ICON_WARNING,
+            )
+    
+    def update_results(self, result: CalculationResult):
+        """Форматирует параметры Гельмерта в нижнее текстовое поле."""
+        p = result.params
+        text = (
+            f"  dX = {p.dx:+.4f} м\n"
+            f"  dY = {p.dy:+.4f} м\n"
+            f"  dZ = {p.dz:+.4f} м\n"
+            f"  rX = {p.rx_sec:+.6f} ″\n"
+            f"  rY = {p.ry_sec:+.6f} ″\n"
+            f"  rZ = {p.rz_sec:+.6f} ″\n"
+            f"  dS = {p.scale_ppm:+.6f} ppm\n"
+            f"\n"
+            f"  СКО (ECEF) = {p.rms_error * 100:.2f} см"
+        )
+        self._set_result_text(text)
+        self.is_modified = False
 
     def on_copy_wkt(self, event):
         text = self.m_txt_result.GetValue()
@@ -214,12 +298,6 @@ class MainFrame(BaseMainFrame):
         self.coord_grid.set_data(data)
         if result is not None:
             self.coord_grid.update_residuals(result.residuals)
-
-    def update_results(self, result: CalculationResult):
-        """Показать параметры преобразования в текстовом поле."""
-        # TODO: форматировать result в текст (WKT / читаемый вид)
-        self._set_result_text(str(result))
-        self.is_modified = False
 
     def _set_result_text(self, text: str):
         self.m_txt_result.SetValue(text)
@@ -310,6 +388,7 @@ class MainFrame(BaseMainFrame):
         self.point_pairs  = []
         self.calc_result  = None
         self.is_modified  = False
+        self.result_crs = None
 
         # Очищаем панель результатов
         self._set_result_text("")
