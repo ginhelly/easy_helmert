@@ -16,22 +16,23 @@ from typing import List, Tuple
 from pyproj import CRS, Transformer
 
 from .models import CalculationResult, PointPair, TransformationParams
-from utils.crs_utils import base_crs
-
 
 # ── Эллипсоид ─────────────────────────────────────────────────────────────────
 
-def _ellipsoid(crs: CRS) -> Tuple[float, float]:
+def ellipsoid(crs: CRS) -> Tuple[float, float]:
     ell   = crs.geodetic_crs.ellipsoid
     a     = ell.semi_major_metre
     inv_f = ell.inverse_flattening
     f     = (1.0 / inv_f) if inv_f else 0.0
     return a, f
 
+def base_crs(crs: CRS) -> CRS:
+    """Bound CRS → source_crs (убираем встроенный TOWGS84)."""
+    return crs.source_crs if crs.type_name == "Bound CRS" else crs
 
 # ── BLH ↔ ECEF ────────────────────────────────────────────────────────────────
 
-def _blh_to_ecef(lat: np.ndarray, lon: np.ndarray, h: np.ndarray,
+def blh_to_ecef(lat: np.ndarray, lon: np.ndarray, h: np.ndarray,
                  a: float, f: float) -> np.ndarray:
     e2      = 2 * f - f ** 2
     sin_lat = np.sin(lat)
@@ -43,7 +44,7 @@ def _blh_to_ecef(lat: np.ndarray, lon: np.ndarray, h: np.ndarray,
     return np.column_stack([X, Y, Z])
 
 
-def _ecef_to_blh(X: np.ndarray, Y: np.ndarray, Z: np.ndarray,
+def ecef_to_blh(X: np.ndarray, Y: np.ndarray, Z: np.ndarray,
                  a: float, f: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     e2  = 2 * f - f ** 2
     p   = np.sqrt(X ** 2 + Y ** 2)
@@ -96,7 +97,7 @@ def _enu_matrices(lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
 
 # ── Гельмерт (Position Vector, EPSG:1033) ─────────────────────────────────────
 
-def _helmert_forward(pts: np.ndarray,
+def helmert_forward(pts: np.ndarray,
                      dX: float, dY: float, dZ: float,
                      rX: float, rY: float, rZ: float,
                      dS: float) -> np.ndarray:
@@ -147,7 +148,7 @@ def _fit(src_ecef: np.ndarray,
     обратно в ECEF — так оптимизатор работает в метрах по всем осям.
     """
     # Матрицы поворота считаем один раз по исходным ECEF
-    lat, lon, _ = _ecef_to_blh(
+    lat, lon, _ = ecef_to_blh(
         src_ecef[:, 0], src_ecef[:, 1], src_ecef[:, 2],
         *_ellipsoid_from_ecef_approx(src_ecef)
     )
@@ -157,7 +158,7 @@ def _fit(src_ecef: np.ndarray,
     p0 = _linear_initial(src_ecef, tgt_ecef, enu_w)
 
     def fun(p):
-        pred    = _helmert_forward(src_ecef, *p)          # (N,3) ECEF
+        pred    = helmert_forward(src_ecef, *p)          # (N,3) ECEF
         d_ecef  = pred - tgt_ecef                         # (N,3)
         d_enu   = np.einsum('nij,nj->ni', R,  d_ecef)    # (N,3) ENU
         d_w     = d_enu * enu_w                           # взвешиваем
@@ -178,40 +179,37 @@ def _to_ecef(pairs: List[PointPair], source: bool, crs: CRS) -> np.ndarray:
     base = base_crs(crs)
     geo  = base.geodetic_crs
     tf   = Transformer.from_crs(base, geo, always_xy=True)
-    a, f = _ellipsoid(base)
+    a, f = ellipsoid(base)
 
     xs = np.array([p.x1 if source else p.x2 for p in pairs])
     ys = np.array([p.y1 if source else p.y2 for p in pairs])
     hs = np.array([(p.h1 or 0.0) if source else (p.h2 or 0.0) for p in pairs])
 
     lons, lats, hs_geo = tf.transform(xs, ys, hs)
-    return _blh_to_ecef(np.deg2rad(lats), np.deg2rad(lons), hs_geo, a, f)
+    return blh_to_ecef(np.deg2rad(lats), np.deg2rad(lons), hs_geo, a, f)
 
 
 # ── Невязки ────────────────────────────────────────────────────────────────────
 
 def _residuals(
-    pairs:      List[PointPair],
-    src_ecef:   np.ndarray,
-    raw:        np.ndarray,
-    target_crs: CRS,
+    pairs:     List[PointPair],
+    src_ecef:  np.ndarray,
+    tgt_ecef:  np.ndarray,
+    raw:       np.ndarray,
 ) -> List[Tuple[float, float, float]]:
-    base = base_crs(target_crs)
-    geo  = base.geodetic_crs
-    tf   = Transformer.from_crs(geo, base, always_xy=True)
-    a, f = _ellipsoid(base)
-
-    pred              = _helmert_forward(src_ecef, *raw)
-    lat_r, lon_r, h_p = _ecef_to_blh(pred[:, 0], pred[:, 1], pred[:, 2], a, f)
-    x_pred, y_pred    = tf.transform(np.rad2deg(lon_r), np.rad2deg(lat_r))
+    """
+    Невязки в метрах в геоцентрической системе (ECEF):
+      dX = X_pred − X_tgt
+      dY = Y_pred − Y_tgt
+      dZ = Z_pred − Z_tgt
+    Всегда метры, не зависят от типа целевой СК.
+    """
+    pred = helmert_forward(src_ecef, *raw)
+    diff = pred - tgt_ecef   # (N, 3), метры
 
     return [
-        (
-            float(x_pred[i] - p.x2),
-            float(y_pred[i] - p.y2),
-            float(h_p[i]    - (p.h2 or 0.0)),
-        )
-        for i, p in enumerate(pairs)
+        (float(diff[i, 0]), float(diff[i, 1]), float(diff[i, 2]))
+        for i in range(len(pairs))
     ]
 
 
@@ -264,7 +262,7 @@ def calculate_helmert(
 
     # RMSE считаем только по активным точкам
     active_mask = enu_w.sum(axis=1) > 0
-    pred_ecef   = _helmert_forward(src_ecef, *raw)
+    pred_ecef   = helmert_forward(src_ecef, *raw)
     ecef_rmse   = float(np.sqrt(
         np.mean((pred_ecef[active_mask] - tgt_ecef[active_mask]) ** 2)
     ))
@@ -278,6 +276,6 @@ def calculate_helmert(
 
     # _residuals считает для ВСЕХ переданных точек, включая отключённые
     return CalculationResult(
-        params=params,
-        residuals=_residuals(pairs, src_ecef, raw, target_crs),
+        params           = params,
+        residuals        = _residuals(pairs, src_ecef, tgt_ecef, raw),
     )

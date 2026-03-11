@@ -8,14 +8,10 @@ from typing import Dict, List, Optional, Tuple
 from pyproj import CRS, Transformer
 
 from core.models import TransformationParams
+from core.transformation import ellipsoid, base_crs, blh_to_ecef, ecef_to_blh, helmert_forward
 
 
 # ── Базовые утилиты ───────────────────────────────────────────────────────────
-
-def base_crs(crs: CRS) -> CRS:
-    """Bound CRS → source_crs (убираем встроенный TOWGS84)."""
-    return crs.source_crs if crs.type_name == "Bound CRS" else crs
-
 
 def get_geodetic_crs(crs: CRS) -> CRS:
     return crs.geodetic_crs
@@ -200,48 +196,178 @@ def describe_crs(crs: CRS) -> str:
 
     return "\n".join(lines)
 
+def make_helmert_transformer(
+    source_crs: CRS,
+    target_crs: CRS,
+    params: "TransformationParams",
+):
+    """
+    Возвращает callable(x, y, h) → (x, y, h): source_crs → target_crs
+    с явным 3D Гельмертом через ECEF.
+
+    Три шага:
+      1. source_crs → source geodetic  (pyproj, только проекция, без датума)
+      2. BLH → ECEF → Helmert → ECEF → BLH  (наши формулы, EPSG:1033)
+      3. target geodetic → target_crs  (pyproj, только проекция)
+
+    Математически тождественно BOUNDCRS WKT2, который мы экспортируем.
+    Используется вместо Transformer.from_crs(result_crs, target_crs),
+    потому что PROJ не гарантирует корректное разворачивание BOUNDCRS
+    в 3D-pipeline через from_crs.
+    """
+    import numpy as np
+
+    ARCSEC_TO_RAD = np.pi / (180.0 * 3600.0)
+
+    base_src = base_crs(source_crs)
+    base_tgt = base_crs(target_crs)
+
+    a_src, f_src = ellipsoid(base_src)
+    a_tgt, f_tgt = ellipsoid(base_tgt)
+
+    # Шаг 1: source → source geodetic (чистая инверсия проекции, никакого towgs84)
+    tf_to_geo   = Transformer.from_crs(base_src, base_src.geodetic_crs, always_xy=True)
+    # Шаг 3: target geodetic → target (чистая проекция, никакого towgs84)
+    tf_from_geo = Transformer.from_crs(base_tgt.geodetic_crs, base_tgt, always_xy=True)
+
+    raw = [
+        params.dx,                        params.dy,                        params.dz,
+        params.rx_sec * ARCSEC_TO_RAD,    params.ry_sec * ARCSEC_TO_RAD,    params.rz_sec * ARCSEC_TO_RAD,
+        params.ds_raw,
+    ]
+
+    def _transform(xs, ys, hs):
+        xs = np.asarray(xs, float)
+        ys = np.asarray(ys, float)
+        hs = np.asarray(hs, float)
+
+        # Шаг 1
+        lons, lats, heights = tf_to_geo.transform(xs, ys, hs)
+
+        # Шаг 2
+        ecef_src = blh_to_ecef(np.deg2rad(lats), np.deg2rad(lons), heights, a_src, f_src)
+        ecef_tgt = helmert_forward(ecef_src, *raw)
+        lat_t, lon_t, h_t = ecef_to_blh(ecef_tgt[:, 0], ecef_tgt[:, 1], ecef_tgt[:, 2], a_tgt, f_tgt)
+
+        # Шаг 3
+        xp, yp, hp = tf_from_geo.transform(np.rad2deg(lon_t), np.rad2deg(lat_t), h_t)
+        return xp, yp, np.asarray(hp)
+
+    return _transform
+
 def make_bound_crs(source_crs: CRS, params: TransformationParams) -> CRS:
     """
-    Создаёт Bound CRS: исходная СК + вычисленные параметры TOWGS84.
+    Создаёт proper 3D BoundCRS в формате WKT2:
+      - Source: 3D-версия исходной СК (projected или geographic)
+      - Target: WGS 84 3D (EPSG:4979)
+      - Transformation: Position Vector 7-param Helmert (EPSG:1033)
 
-    Используется для экспорта WKT/Proj4 с вшитыми параметрами перехода.
-    Если source_crs сам является Bound CRS (содержал +towgs84) —
-    старые параметры заменяются новыми.
-
-    Параметры TOWGS84 в стандартных единицах:
-      dx, dy, dz   — метры
-      rx, ry, rz   — угловые секунды  (params.rx_sec / ry_sec / rz_sec)
-      ds           — ppm               (params.scale_ppm)
+    to_3d() добавляет эллипсоидальную высоту как третью ось,
+    после чего PROJ строит полный 3D-pipeline включая вертикальный
+    компонент датумного сдвига — в отличие от 2D BoundCRS с passthrough.
     """
-    import re
+    base = base_crs(source_crs)
 
-    base = base_crs(source_crs)   # снимаем старый Bound если был
+    try:
+        source_3d = base.to_3d()
+    except Exception:
+        source_3d = base
 
-    towgs84_values = (
-        f"{params.dx:.6f},{params.dy:.6f},{params.dz:.6f},"
-        f"{params.rx_sec:.8f},{params.ry_sec:.8f},{params.rz_sec:.8f},"
-        f"{params.scale_ppm:.8f}"
+    target_3d = CRS.from_epsg(4979)
+
+    src_wkt = source_3d.to_wkt(version="WKT2_2019")
+    tgt_wkt = target_3d.to_wkt(version="WKT2_2019")
+
+    wkt2 = (
+        'BOUNDCRS[\n'
+        f'    SOURCECRS[{src_wkt}],\n'
+        f'    TARGETCRS[{tgt_wkt}],\n'
+        '    ABRIDGEDTRANSFORMATION["Helmert 7 parameters",\n'
+        '        METHOD["Position Vector transformation (geocentric domain)",'
+            'ID["EPSG",1033]],\n'
+        f'        PARAMETER["X-axis translation",{params.dx:.6f},'
+            'LENGTHUNIT["metre",1,ID["EPSG",9001]]],\n'
+        f'        PARAMETER["Y-axis translation",{params.dy:.6f},'
+            'LENGTHUNIT["metre",1,ID["EPSG",9001]]],\n'
+        f'        PARAMETER["Z-axis translation",{params.dz:.6f},'
+            'LENGTHUNIT["metre",1,ID["EPSG",9001]]],\n'
+        f'        PARAMETER["X-axis rotation",{params.rx_sec:.8f},'
+            'ANGLEUNIT["arc-second",4.84813681109536e-06,ID["EPSG",9104]]],\n'
+        f'        PARAMETER["Y-axis rotation",{params.ry_sec:.8f},'
+            'ANGLEUNIT["arc-second",4.84813681109536e-06,ID["EPSG",9104]]],\n'
+        f'        PARAMETER["Z-axis rotation",{params.rz_sec:.8f},'
+            'ANGLEUNIT["arc-second",4.84813681109536e-06,ID["EPSG",9104]]],\n'
+        f'        PARAMETER["Scale difference",{params.scale_ppm:.8f},'
+            'SCALEUNIT["parts per million",1e-06,ID["EPSG",9202]]]\n'
+        '    ]\n'
+        ']'
     )
 
-    # Попытка 1: через to_dict() — сохраняет все параметры проекции точнее
     try:
-        d = base.to_dict()
-        d["towgs84"] = [
-            params.dx,        params.dy,        params.dz,
-            params.rx_sec,    params.ry_sec,    params.rz_sec,
-            params.scale_ppm,
-        ]
-        return CRS.from_dict(d)
-    except Exception:
-        pass
-
-    # Попытка 2: через proj4-строку
-    try:
-        proj4 = base.to_proj4()
-        proj4 = re.sub(r"\+towgs84=\S+", "", proj4).strip()
-        proj4 += f" +towgs84={towgs84_values}"
-        return CRS.from_user_input(proj4)
+        return CRS.from_wkt(wkt2)
     except Exception as e:
         raise RuntimeError(
-            f"Не удалось создать Bound CRS из исходной СК:\n{e}"
+            f"Не удалось создать 3D BoundCRS:\n{e}\n\nWKT2:\n{wkt2}"
         ) from e
+    
+
+def compute_metric_residuals(
+    x1s, y1s, h1s,
+    x2s, y2s, h2s,
+    source_crs: CRS,
+    target_crs: CRS,
+    params: TransformationParams,
+) -> list:
+    """
+    Невязки (dE, dN, dU) в метрах.
+
+    Предсказанные координаты получаем через make_helmert_transformer
+    (≡ result_crs → target_crs), сравниваем с фактическими (x2, y2, h2).
+    """
+    import numpy as np
+
+    x1 = np.asarray(x1s, float)
+    y1 = np.asarray(y1s, float)
+    h1 = np.asarray(h1s, float)
+    x2 = np.asarray(x2s, float)
+    y2 = np.asarray(y2s, float)
+    h2 = np.asarray(h2s, float)
+
+    transform = make_helmert_transformer(source_crs, target_crs, params)
+    xp, yp, hp = transform(x1, y1, h1)
+
+    # dU всегда в метрах
+    du = (hp - h2).tolist()
+
+    base_src = base_crs(source_crs)
+    base_tgt = base_crs(target_crs)
+
+    if base_tgt.is_projected:
+        # а) целевая метрическая — разности уже в метрах
+        de = (xp - x2).tolist()
+        dn = (yp - y2).tolist()
+
+    elif base_src.is_projected:
+        # б) целевая градусная, исходная метрическая
+        # Оба набора → исходная проекция одним трансформером → метры
+        tf_inv         = Transformer.from_crs(base_tgt, base_src, always_xy=True)
+        xp_m, yp_m, _ = tf_inv.transform(xp, yp, hp)
+        xa_m, ya_m, _ = tf_inv.transform(x2, y2, h2)
+        de = (xp_m - xa_m).tolist()
+        dn = (yp_m - ya_m).tolist()
+
+    else:
+        # в) обе градусные → UTM по центроиду предсказанных точек
+        centroid_lon = float(np.mean(xp))
+        centroid_lat = float(np.mean(yp))
+        zone         = int((centroid_lon + 180) / 6) % 60 + 1
+        utm_epsg     = (32700 if centroid_lat < 0 else 32600) + zone
+        utm_crs      = CRS.from_epsg(utm_epsg)
+
+        tf_utm         = Transformer.from_crs(base_tgt, utm_crs, always_xy=True)
+        xp_m, yp_m, _ = tf_utm.transform(xp, yp, hp)
+        xa_m, ya_m, _ = tf_utm.transform(x2, y2, h2)
+        de = (xp_m - xa_m).tolist()
+        dn = (yp_m - ya_m).tolist()
+
+    return [(float(de[i]), float(dn[i]), float(du[i])) for i in range(len(x1))]

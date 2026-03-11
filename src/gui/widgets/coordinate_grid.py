@@ -89,7 +89,10 @@ class _Col:
     DX       = 9   # невязка dX  (readonly)
     DY       = 10  # невязка dY  (readonly)
     DH       = 11  # невязка dH  (readonly)
-    COUNT    = 12
+    DE       = 12   # невязка dE, м
+    DN       = 13   # невязка dN, м
+    DU       = 14   # невязка dU, м
+    COUNT    = 15
 
 
 # (заголовок, мин. ширина px, readonly, flex-вес для авторастяжки)
@@ -104,12 +107,18 @@ _COL_DEFS: List[Tuple[str, int, bool, float]] = [
     ("Восток цел.", 90, False, 1.2),   # X2
     ("Север цел.", 90, False, 1.2),   # Y2
     ("Высота цел.", 82, False, 1.0),   # H2
-    ("dX",     72, True,  0.8),   # DX
-    ("dY",     72, True,  0.8),   # DY
-    ("dH",     72, True,  0.8),   # DH
+    ("ΔX, м",   72, True,  0.8),   # геоцентрические невязки, метры
+    ("ΔY, м",   72, True,  0.8),
+    ("ΔZ, м",   72, True,  0.8),
+    ("dE, м",   72, True,  0.8),   # практические невязки ENU, метры
+    ("dN, м",   72, True,  0.8),
+    ("dU, м",   72, True,  0.8),
 ]
 
-_READONLY_COLS  = frozenset({_Col.DX, _Col.DY, _Col.DH})
+_READONLY_COLS = frozenset({
+    _Col.DX, _Col.DY, _Col.DH,
+    _Col.DE, _Col.DN, _Col.DU,   # ← добавлены
+})
 _CHECKBOX_COLS  = frozenset({_Col.USE_PLAN, _Col.USE_H})
 _NUMERIC_COLS   = frozenset({
     _Col.X1, _Col.Y1, _Col.H1,
@@ -844,9 +853,51 @@ class CoordinateGrid(gridlib.Grid):
 
         self.ForceRefresh()
 
+    def update_metric_residuals(
+        self,
+        residuals: List[Optional[Tuple]],
+        threshold: float = _DEFAULT_THRESHOLD,
+    ):
+        """
+        Обновить столбцы dE / dN / dU (невязки в метрах).
+        Формат residuals[i]: (de, dn, du) или None.
+        """
+        for row, res in enumerate(residuals):
+            if row >= self.GetNumberRows():
+                break
+            if res is None:
+                for col in (_Col.DE, _Col.DN, _Col.DU):
+                    self.SetCellValue(row, col, "")
+                    self.SetCellBackgroundColour(row, col, _CLR_NA)
+                continue
+
+            de = res[0] if len(res) > 0 else None
+            dn = res[1] if len(res) > 1 else None
+            du = res[2] if len(res) > 2 else None
+
+            plan_bad = (de is not None and abs(de) > threshold) or \
+                    (dn is not None and abs(dn) > threshold)
+            h_bad    =  du is not None and abs(du) > threshold
+
+            for col, val, bad in (
+                (_Col.DE, de, plan_bad),
+                (_Col.DN, dn, plan_bad),
+                (_Col.DU, du, h_bad),
+            ):
+                if val is None:
+                    self.SetCellValue(row, col, "")
+                    self.SetCellBackgroundColour(row, col, _CLR_NA)
+                else:
+                    self.SetCellValue(row, col, f"{val:+.4f}")
+                    self.SetCellBackgroundColour(row, col, _CLR_BAD if bad else _CLR_OK)
+
+        self.ForceRefresh()
+
     def clear_residuals(self):
         """Сбросить все невязки (например, при изменении входных данных)."""
-        self.update_residuals([None] * self.GetNumberRows())
+        n = self.GetNumberRows()
+        self.update_residuals([None] * n)
+        self.update_metric_residuals([None] * n)
 
     # ── Вспомогательные ───────────────────────────────────────────────────────
 

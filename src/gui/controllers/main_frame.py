@@ -234,6 +234,30 @@ class MainFrame(BaseMainFrame):
                 f"Параметры вычислены, но создать результирующую СК не удалось:\n{e}",
                 "Предупреждение", wx.OK | wx.ICON_WARNING,
             )
+        
+        # Метрические невязки dE / dN / dU
+        try:
+            from utils.crs_utils import compute_metric_residuals
+            metric_res = compute_metric_residuals(
+                [p.x1        for p in pairs],
+                [p.y1        for p in pairs],
+                [p.h1 or 0.0 for p in pairs],
+                [p.x2        for p in pairs],
+                [p.y2        for p in pairs],
+                [p.h2 or 0.0 for p in pairs],
+                source_crs = self.source_crs,
+                target_crs = self.target_crs,
+                params     = result.params,   # ← params вместо result_crs
+            )
+            all_metric = [None] * len(raw)
+            j = 0
+            for i, r in enumerate(raw):
+                if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
+                    all_metric[i] = metric_res[j]
+                    j += 1
+            self.coord_grid.update_metric_residuals(all_metric)
+        except Exception as e:
+            raise e
     
     def update_results(self, result: CalculationResult):
         """Форматирует параметры Гельмерта в нижнее текстовое поле."""

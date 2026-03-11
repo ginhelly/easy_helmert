@@ -271,10 +271,10 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizer181.Add( self.m_staticText121, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
 
-        m_choice_rotation_units1Choices = [ u"Безразмерный коэффициент", u"Миллионные части (ppm)", u"Миллиардные части (ppb)" ]
-        self.m_choice_rotation_units1 = wx.Choice( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_rotation_units1Choices, 0 )
-        self.m_choice_rotation_units1.SetSelection( 1 )
-        bSizer181.Add( self.m_choice_rotation_units1, 1, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+        m_choice_scale_unitsChoices = [ u"Безразмерный коэффициент", u"Миллионные части (ppm)", u"Миллиардные части (ppb)" ]
+        self.m_choice_scale_units = wx.Choice( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_scale_unitsChoices, 0 )
+        self.m_choice_scale_units.SetSelection( 1 )
+        bSizer181.Add( self.m_choice_scale_units, 1, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
 
 
         bSizer17.Add( bSizer181, 0, wx.EXPAND, 5 )
