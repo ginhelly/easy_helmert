@@ -2,7 +2,7 @@ import wx
 from typing import Dict, List, Optional
 from pyproj import CRS
 
-from core.models import PointPair, CalculationResult
+from core.models import *
 from gui.forms.easy_helmert_base import BaseMainFrame
 from gui.widgets.coordinate_grid import CoordinateGrid
 from utils.xrc_loader import xrc
@@ -107,6 +107,22 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_BUTTON, self.on_copy_wkt,   self.m_btn_copy_wkt)
         self.Bind(wx.EVT_BUTTON, self.on_copy_proj4, self.m_btn_copy_proj4)
         self.Bind(wx.EVT_BUTTON, self.on_save_result,self.m_btn_save_result)
+
+        for ctrl in (
+            self.m_rb_method,
+            self.m_rb_direction,
+            self.m_choice_rotation_units,
+            self.m_choice_scale_units,
+        ):
+            ctrl.Bind(
+                wx.EVT_RADIOBOX if isinstance(ctrl, wx.RadioBox) else wx.EVT_CHOICE,
+                self._on_display_settings_changed,
+            )
+
+    def _on_display_settings_changed(self, event):
+        if self.calc_result is not None:
+            self.update_results(self.calc_result)
+        event.Skip()
 
     def _on_grid_data_changed(self):
         """
@@ -236,45 +252,55 @@ class MainFrame(BaseMainFrame):
             )
         
         # Метрические невязки dE / dN / dU
-        try:
-            from utils.crs_utils import compute_metric_residuals
-            metric_res = compute_metric_residuals(
-                [p.x1        for p in pairs],
-                [p.y1        for p in pairs],
-                [p.h1 or 0.0 for p in pairs],
-                [p.x2        for p in pairs],
-                [p.y2        for p in pairs],
-                [p.h2 or 0.0 for p in pairs],
-                source_crs = self.source_crs,
-                target_crs = self.target_crs,
-                params     = result.params,   # ← params вместо result_crs
-            )
-            all_metric = [None] * len(raw)
-            j = 0
-            for i, r in enumerate(raw):
-                if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
-                    all_metric[i] = metric_res[j]
-                    j += 1
-            self.coord_grid.update_metric_residuals(all_metric)
-        except Exception as e:
-            raise e
+        # ENU-невязки уже в result.residuals_enu
+        all_metric = [None] * len(raw)
+        j = 0
+        for i, r in enumerate(raw):
+            if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
+                all_metric[i] = result.residuals_enu[j]
+                j += 1
+        self.coord_grid.update_metric_residuals(all_metric)
     
-    def update_results(self, result: CalculationResult):
-        """Форматирует параметры Гельмерта в нижнее текстовое поле."""
-        p = result.params
-        text = (
-            f"  dX = {p.dx:+.4f} м\n"
-            f"  dY = {p.dy:+.4f} м\n"
-            f"  dZ = {p.dz:+.4f} м\n"
-            f"  rX = {p.rx_sec:+.6f} ″\n"
-            f"  rY = {p.ry_sec:+.6f} ″\n"
-            f"  rZ = {p.rz_sec:+.6f} ″\n"
-            f"  dS = {p.scale_ppm:+.6f} ppm\n"
-            f"\n"
-            f"  СКО (ECEF) = {p.rms_error * 100:.2f} см"
+    def _read_display_settings(self) -> DisplaySettings:
+        return DisplaySettings(
+            method        = HelmertMethod(self.m_rb_method.GetSelection()),
+            direction     = HelmertDirection(self.m_rb_direction.GetSelection()),
+            rotation_unit = RotationUnit(self.m_choice_rotation_units.GetSelection()),
+            scale_unit    = ScaleUnit(self.m_choice_scale_units.GetSelection()),
+            source_name   = self._src_crs_name(),
+            target_name   = self._tgt_crs_name(),
+            rms_metric_m  = self._rms_from_grid(),
         )
-        self._set_result_text(text)
+
+    def _rms_from_grid(self) -> Optional[float]:
+        """СКО по ENU-невязкам из последнего результата расчёта."""
+        import numpy as np
+        if self.calc_result is None or not self.calc_result.residuals_enu:
+            return None
+        arr = np.array(self.calc_result.residuals_enu)
+        return float(np.sqrt(np.mean(arr ** 2)))
+
+    def _on_display_settings_changed(self, event):
+        if self.calc_result is not None:
+            self.update_results(self.calc_result)
+        event.Skip()
+
+    def update_results(self, result: CalculationResult):
+        display = result.params.as_display(self._read_display_settings())
+        self._set_result_text(display.to_text())
         self.is_modified = False
+
+    def _src_crs_name(self) -> str:
+        if getattr(self, "source_crs", None):
+            return getattr(self, "_source_crs_label",
+                        self.source_crs.name)
+        return "исходная"
+
+    def _tgt_crs_name(self) -> str:
+        if getattr(self, "target_crs", None):
+            return getattr(self, "_target_crs_label",
+                        self.target_crs.name)
+        return "целевая"
 
     def on_copy_wkt(self, event):
         text = self.m_txt_result.GetValue()
@@ -570,6 +596,7 @@ class MainFrame(BaseMainFrame):
         with CrsPickerDialog(self, "Исходная система координат") as dlg:
             if dlg.ShowModal() == wx.ID_OK:
                 self.source_crs = dlg.get_selected_crs()
+                self._source_crs_label  = dlg.get_selected_name()
                 self.m_lbl_src_crs.SetLabel(dlg.get_selected_name())
 
     def on_select_target_crs(self, event):
@@ -577,4 +604,5 @@ class MainFrame(BaseMainFrame):
         with CrsPickerDialog(self, "Целевая система координат") as dlg:
             if dlg.ShowModal() == wx.ID_OK:
                 self.target_crs = dlg.get_selected_crs()
+                self._target_crs_label  = dlg.get_selected_name()
                 self.m_lbl_tgt_crs.SetLabel(dlg.get_selected_name())

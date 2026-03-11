@@ -376,10 +376,18 @@ class BaseCRSPickerDialog ( wx.Dialog ):
         self.m_txt_wkt_input = wx.TextCtrl( self.m_page_custom, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE )
         self.m_txt_wkt_input.SetMinSize( wx.Size( -1,150 ) )
 
-        bSizerCustom.Add( self.m_txt_wkt_input, 0, wx.ALL|wx.EXPAND, 5 )
+        bSizerCustom.Add( self.m_txt_wkt_input, 1, wx.ALL|wx.EXPAND, 5 )
 
-        self.m_btn_parse_crs = wx.Button( self.m_page_custom, wx.ID_ANY, u"Импортировать", wx.DefaultPosition, wx.DefaultSize, 0 )
-        bSizerCustom.Add( self.m_btn_parse_crs, 0, wx.ALL, 5 )
+        bSizer22 = wx.BoxSizer( wx.HORIZONTAL )
+
+        self.m_btn_parse_crs = wx.Button( self.m_page_custom, wx.ID_ANY, u"Импортировать из строки", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer22.Add( self.m_btn_parse_crs, 0, wx.ALL, 5 )
+
+        self.m_btn_import_crs_from_file = wx.Button( self.m_page_custom, wx.ID_ANY, u"Импортировать из файла...", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer22.Add( self.m_btn_import_crs_from_file, 0, wx.ALL, 5 )
+
+
+        bSizerCustom.Add( bSizer22, 0, wx.EXPAND, 5 )
 
 
         self.m_page_custom.SetSizer( bSizerCustom )

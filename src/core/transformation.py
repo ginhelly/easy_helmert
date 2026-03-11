@@ -274,8 +274,25 @@ def calculate_helmert(
         rms_error=ecef_rmse,
     )
 
-    # _residuals считает для ВСЕХ переданных точек, включая отключённые
+    from utils.crs_utils import compute_metric_residuals
+
+    try:
+        enu = compute_metric_residuals(
+            [p.x1        for p in pairs],
+            [p.y1        for p in pairs],
+            [p.h1 or 0.0 for p in pairs],
+            [p.x2        for p in pairs],
+            [p.y2        for p in pairs],
+            [p.h2 or 0.0 for p in pairs],
+            source_crs = source_crs,
+            target_crs = target_crs,
+            params     = params,
+        )
+    except Exception:
+        enu = [(0.0, 0.0, 0.0)] * len(pairs)
+
     return CalculationResult(
-        params           = params,
-        residuals        = _residuals(pairs, src_ecef, tgt_ecef, raw),
+        params        = params,
+        residuals     = _residuals(pairs, src_ecef, tgt_ecef, raw),
+        residuals_enu = enu,
     )

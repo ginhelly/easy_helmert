@@ -71,6 +71,7 @@ class CrsPickerDialog(BaseCRSPickerDialog):
 
         self.m_btn_parse_crs.Bind(wx.EVT_BUTTON, self._on_parse_custom)
         self.m_btn_ok.Bind(wx.EVT_BUTTON, self._on_ok)
+        self.m_btn_import_crs_from_file.Bind(wx.EVT_BUTTON, self._on_import_crs_from_file)
 
     # ── Построение дерева ─────────────────────────────────────────────────────
 
@@ -188,6 +189,49 @@ class CrsPickerDialog(BaseCRSPickerDialog):
             self._set_crs(crs, display_name=crs.name)
         except CRSError as e:
             self._set_error(str(e))
+
+    
+    def _on_import_crs_from_file(self, event):
+        with wx.FileDialog(
+            self,
+            "Открыть файл с описанием СК",
+            wildcard=(
+                "Файлы СК (*.wkt;*.prj;*.txt)|*.wkt;*.prj;*.txt"
+                "|Все файлы (*.*)|*.*"
+            ),
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
+        ) as dlg:
+            if dlg.ShowModal() == wx.ID_CANCEL:
+                return
+            path = dlg.GetPath()
+
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read().strip()
+        except UnicodeDecodeError:
+            # Некоторые .prj файлы в cp1251
+            try:
+                with open(path, encoding="cp1251") as f:
+                    text = f.read().strip()
+            except Exception as e:
+                self._set_error(f"Не удалось прочитать файл:\n{e}")
+                return
+        except Exception as e:
+            self._set_error(f"Не удалось прочитать файл:\n{e}")
+            return
+
+        if not text:
+            self._set_error("Файл пустой.")
+            return
+
+        # Показываем текст в поле ввода — пользователь видит что импортировали
+        self.m_txt_wkt_input.SetValue(text)
+
+        try:
+            crs = CRS.from_user_input(text)
+            self._set_crs(crs, display_name=crs.name)
+        except CRSError as e:
+            self._set_error(f"Не удалось разобрать описание СК:\n{e}")
 
 
     # ── Загрузка CRS ──────────────────────────────────────────────────────────
