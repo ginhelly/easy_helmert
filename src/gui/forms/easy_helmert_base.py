@@ -9,6 +9,7 @@
 
 import wx
 import wx.xrc
+import wx.dataview
 
 ###########################################################################
 ## Class BaseMainFrame
@@ -17,9 +18,9 @@ import wx.xrc
 class BaseMainFrame ( wx.Frame ):
 
     def __init__( self, parent ):
-        wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Easy Helmert", pos = wx.DefaultPosition, size = wx.Size( 1034,621 ), style = wx.DEFAULT_FRAME_STYLE|wx.RESIZE_BORDER|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
+        wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Easy Helmert", pos = wx.DefaultPosition, size = wx.Size( 1034,738 ), style = wx.DEFAULT_FRAME_STYLE|wx.RESIZE_BORDER|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
 
-        self.SetSizeHints( wx.Size( -1,550 ), wx.DefaultSize )
+        self.SetSizeHints( wx.Size( -1,600 ), wx.DefaultSize )
         self.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_HIGHLIGHTTEXT ) )
 
         self.m_statusBar1 = self.CreateStatusBar( 1, wx.STB_SIZEGRIP, wx.ID_ANY )
@@ -133,18 +134,48 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerTableHeader.Add( self.m_btn_swap_dst, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
 
-        self.m_staticline11 = wx.StaticLine( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_VERTICAL )
-        bSizerTableHeader.Add( self.m_staticline11, 0, wx.EXPAND |wx.ALL, 5 )
-
-        self.m_btn_calc = wx.Button( self.m_panel_input, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.Size( 150,-1 ), wx.BU_EXACTFIT )
-
-        self.m_btn_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
-        self.m_btn_calc.SetMinSize( wx.Size( 150,-1 ) )
-
-        bSizerTableHeader.Add( self.m_btn_calc, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
-
 
         bSizerInput.Add( bSizerTableHeader, 0, wx.EXPAND, 5 )
+
+        bSizerCRSSettings = wx.BoxSizer( wx.HORIZONTAL )
+
+        self.m_staticText4 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"ИСХОДНАЯ СК:", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText4.Wrap( -1 )
+
+        bSizerCRSSettings.Add( self.m_staticText4, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+        self.m_lbl_src_crs = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Не выбрана", wx.DefaultPosition, wx.Size( 250,-1 ), wx.ST_ELLIPSIZE_MIDDLE )
+        self.m_lbl_src_crs.Wrap( -1 )
+
+        self.m_lbl_src_crs.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
+        self.m_lbl_src_crs.SetMaxSize( wx.Size( 250,-1 ) )
+
+        bSizerCRSSettings.Add( self.m_lbl_src_crs, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+        self.m_btn_set_src_crs = wx.Button( self.m_panel_input, wx.ID_ANY, u"Исходная СК...", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizerCRSSettings.Add( self.m_btn_set_src_crs, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+
+        bSizerCRSSettings.Add( ( 0, 0), 1, wx.EXPAND, 5 )
+
+        self.m_staticText41 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"ЦЕЛЕВАЯ СК:", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText41.Wrap( -1 )
+
+        bSizerCRSSettings.Add( self.m_staticText41, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+        self.m_lbl_tgt_crs = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Не выбрана", wx.DefaultPosition, wx.Size( 250,-1 ), wx.ST_ELLIPSIZE_MIDDLE )
+        self.m_lbl_tgt_crs.Wrap( -1 )
+
+        self.m_lbl_tgt_crs.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
+        self.m_lbl_tgt_crs.SetMaxSize( wx.Size( 250,-1 ) )
+
+        bSizerCRSSettings.Add( self.m_lbl_tgt_crs, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+        self.m_btn_set_tgt_crs = wx.Button( self.m_panel_input, wx.ID_ANY, u"Целевая СК...", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizerCRSSettings.Add( self.m_btn_set_tgt_crs, 0, wx.ALL, 5 )
+
+
+        bSizerInput.Add( bSizerCRSSettings, 0, wx.EXPAND, 5 )
 
         self.m_grid_placeholder = wx.Panel( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
         bSizerInput.Add( self.m_grid_placeholder, 1, wx.EXPAND |wx.ALL, 2 )
@@ -168,6 +199,16 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerResultHeader.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
+        self.m_btn_calc = wx.Button( self.m_panel_result, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.Size( 150,-1 ), wx.BU_EXACTFIT )
+
+        self.m_btn_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
+        self.m_btn_calc.SetMinSize( wx.Size( 150,-1 ) )
+
+        bSizerResultHeader.Add( self.m_btn_calc, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
+
+        self.m_staticline5 = wx.StaticLine( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
+        bSizerResultHeader.Add( self.m_staticline5, 0, wx.EXPAND |wx.ALL, 5 )
+
         self.m_btn_copy_wkt = wx.Button( self.m_panel_result, wx.ID_ANY, u"Копировать WKT", wx.DefaultPosition, wx.DefaultSize, 0 )
         bSizerResultHeader.Add( self.m_btn_copy_wkt, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
 
@@ -184,11 +225,71 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerResult.Add( bSizerResultHeader, 0, wx.EXPAND, 5 )
 
-        self.m_txt_result = wx.TextCtrl( self.m_panel_result, wx.ID_ANY, u"Результат расчёта...", wx.DefaultPosition, wx.DefaultSize, wx.HSCROLL|wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_RICH2 )
-        self.m_txt_result.SetFont( wx.Font( 10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, "Courier" ) )
-        self.m_txt_result.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_INACTIVECAPTION ) )
+        bSizer15 = wx.BoxSizer( wx.HORIZONTAL )
 
-        bSizerResult.Add( self.m_txt_result, 1, wx.ALL|wx.EXPAND, 5 )
+        bSizer17 = wx.BoxSizer( wx.VERTICAL )
+
+        bSizer17.SetMinSize( wx.Size( -1,250 ) )
+        self.m_staticText15 = wx.StaticText( self.m_panel_result, wx.ID_ANY, u"Настройки вывода параметров", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText15.Wrap( -1 )
+
+        bSizer17.Add( self.m_staticText15, 0, wx.ALL, 5 )
+
+        m_rb_methodChoices = [ u"EPSG:1033 (9606) Position Vector Transformation", u"EPSG:1032 (9607) Coordinate Frame Rotation" ]
+        self.m_rb_method = wx.RadioBox( self.m_panel_result, wx.ID_ANY, u"Метод преобразования", wx.DefaultPosition, wx.DefaultSize, m_rb_methodChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_method.SetSelection( 0 )
+        self.m_rb_method.SetToolTip( u"EPSG:1033 (9606) Position Vector Transformation - дефолтный для WKT- и Proj4-описаний.\nEPSG:1032 (9607) Coordinate Frame Rotation - метод, описанный в ГОСТ 32453-2017\n\nЧтобы понять, какой метод используется в вашей программе, посмотрите в ней на дефолтные 7 параметров для МСК:\nа) Если в них число 23.57 противоположно по знаку всем другим числам, то это 1032 (9607) Coordinate Frame Rotation\nб) Если в них число 23.57 по знаку совпадает с параметрами разворота (0.35 и 0.79), то это 1033 (9606) Position Vector Transformation" )
+
+        bSizer17.Add( self.m_rb_method, 0, wx.ALL|wx.EXPAND, 5 )
+
+        m_rb_directionChoices = [ u"Из исходной -> в целевую", u"Из целевой -> в исходную" ]
+        self.m_rb_direction = wx.RadioBox( self.m_panel_result, wx.ID_ANY, u"Направление параметров", wx.DefaultPosition, wx.DefaultSize, m_rb_directionChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_direction.SetSelection( 0 )
+        bSizer17.Add( self.m_rb_direction, 0, wx.ALL|wx.EXPAND, 5 )
+
+        bSizer18 = wx.BoxSizer( wx.HORIZONTAL )
+
+        bSizer18.SetMinSize( wx.Size( -1,30 ) )
+        self.m_staticText12 = wx.StaticText( self.m_panel_result, wx.ID_ANY, u"Единицы поворота", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText12.Wrap( -1 )
+
+        bSizer18.Add( self.m_staticText12, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+
+        m_choice_rotation_unitsChoices = [ u"Секунды (″)", u"Радианы" ]
+        self.m_choice_rotation_units = wx.Choice( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_rotation_unitsChoices, 0 )
+        self.m_choice_rotation_units.SetSelection( 0 )
+        bSizer18.Add( self.m_choice_rotation_units, 1, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+
+
+        bSizer17.Add( bSizer18, 0, wx.EXPAND, 5 )
+
+        bSizer181 = wx.BoxSizer( wx.HORIZONTAL )
+
+        bSizer181.SetMinSize( wx.Size( -1,30 ) )
+        self.m_staticText121 = wx.StaticText( self.m_panel_result, wx.ID_ANY, u"Единицы масштаба", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText121.Wrap( -1 )
+
+        bSizer181.Add( self.m_staticText121, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+
+        m_choice_rotation_units1Choices = [ u"Безразмерный коэффициент", u"Миллионные части (ppm)", u"Миллиардные части (ppb)" ]
+        self.m_choice_rotation_units1 = wx.Choice( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_rotation_units1Choices, 0 )
+        self.m_choice_rotation_units1.SetSelection( 1 )
+        bSizer181.Add( self.m_choice_rotation_units1, 1, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+
+
+        bSizer17.Add( bSizer181, 0, wx.EXPAND, 5 )
+
+
+        bSizer15.Add( bSizer17, 0, wx.EXPAND, 5 )
+
+        self.m_txt_result = wx.TextCtrl( self.m_panel_result, wx.ID_ANY, u"Результат расчёта...", wx.DefaultPosition, wx.DefaultSize, wx.HSCROLL|wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_RICH2|wx.BORDER_THEME )
+        self.m_txt_result.SetFont( wx.Font( 10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, "Courier" ) )
+        self.m_txt_result.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_INACTIVEBORDER ) )
+
+        bSizer15.Add( self.m_txt_result, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+        bSizerResult.Add( bSizer15, 1, wx.EXPAND, 5 )
 
 
         self.m_panel_result.SetSizer( bSizerResult )
@@ -217,6 +318,111 @@ class BaseMainFrame ( wx.Frame ):
     def m_splitterOnIdle( self, event ):
         self.m_splitter.SetSashPosition( 0 )
         self.m_splitter.Unbind( wx.EVT_IDLE )
+
+    # Virtual image path resolution method. Override this in your derived class.
+    def get_resource_path( self, bitmap_path ):
+        return bitmap_path
+
+
+###########################################################################
+## Class BaseCRSPickerDialog
+###########################################################################
+
+class BaseCRSPickerDialog ( wx.Dialog ):
+
+    def __init__( self, parent ):
+        wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Выбрать систему координат", pos = wx.DefaultPosition, size = wx.Size( 860,640 ), style = wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER )
+
+        self.SetSizeHints( wx.Size( 640,480 ), wx.DefaultSize )
+
+        m_root_sizer = wx.BoxSizer( wx.VERTICAL )
+
+        self.m_notebook1 = wx.Notebook( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_page_search = wx.Panel( self.m_notebook1, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        bSizerSearch = wx.BoxSizer( wx.VERTICAL )
+
+        bSizerSearchTop = wx.BoxSizer( wx.HORIZONTAL )
+
+        self.m_txt_search = wx.TextCtrl( self.m_page_search, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizerSearchTop.Add( self.m_txt_search, 1, wx.ALL|wx.EXPAND, 5 )
+
+        self.m_chk_projected = wx.CheckBox( self.m_page_search, wx.ID_ANY, u"Проецированные", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_chk_projected.SetValue(True)
+        bSizerSearchTop.Add( self.m_chk_projected, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+        self.m_chk_geographic = wx.CheckBox( self.m_page_search, wx.ID_ANY, u"Географические", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_chk_geographic.SetValue(True)
+        bSizerSearchTop.Add( self.m_chk_geographic, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+
+        bSizerSearch.Add( bSizerSearchTop, 0, wx.EXPAND, 5 )
+
+        self.m_tree_search = wx.dataview.DataViewTreeCtrl( self.m_page_search, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.dataview.DV_NO_HEADER|wx.dataview.DV_ROW_LINES )
+        bSizerSearch.Add( self.m_tree_search, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+        self.m_page_search.SetSizer( bSizerSearch )
+        self.m_page_search.Layout()
+        bSizerSearch.Fit( self.m_page_search )
+        self.m_notebook1.AddPage( self.m_page_search, u"Поиск по базе", False )
+        self.m_page_custom = wx.Panel( self.m_notebook1, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        bSizerCustom = wx.BoxSizer( wx.VERTICAL )
+
+        self.m_lbl_custom_hint = wx.StaticText( self.m_page_custom, wx.ID_ANY, u"Вставьте строку формата WKT или Proj4:", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_lbl_custom_hint.Wrap( -1 )
+
+        bSizerCustom.Add( self.m_lbl_custom_hint, 0, wx.ALL, 5 )
+
+        self.m_txt_wkt_input = wx.TextCtrl( self.m_page_custom, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE )
+        self.m_txt_wkt_input.SetMinSize( wx.Size( -1,150 ) )
+
+        bSizerCustom.Add( self.m_txt_wkt_input, 0, wx.ALL|wx.EXPAND, 5 )
+
+        self.m_btn_parse_crs = wx.Button( self.m_page_custom, wx.ID_ANY, u"Импортировать", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizerCustom.Add( self.m_btn_parse_crs, 0, wx.ALL, 5 )
+
+
+        self.m_page_custom.SetSizer( bSizerCustom )
+        self.m_page_custom.Layout()
+        bSizerCustom.Fit( self.m_page_custom )
+        self.m_notebook1.AddPage( self.m_page_custom, u"Импорт из WKT / Proj4", False )
+
+        m_root_sizer.Add( self.m_notebook1, 1, wx.EXPAND |wx.ALL, 5 )
+
+        m_staticbox_info = wx.StaticBoxSizer( wx.StaticBox( self, wx.ID_ANY, u"Параметры выбранной системы координат" ), wx.VERTICAL )
+
+        self.m_txt_crs_info = wx.TextCtrl( m_staticbox_info.GetStaticBox(), wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_RICH2 )
+        self.m_txt_crs_info.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
+        self.m_txt_crs_info.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_INACTIVEBORDER ) )
+        self.m_txt_crs_info.SetMinSize( wx.Size( -1,160 ) )
+
+        m_staticbox_info.Add( self.m_txt_crs_info, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+        m_root_sizer.Add( m_staticbox_info, 1, wx.ALL|wx.EXPAND, 5 )
+
+        m_btn_sizer = wx.BoxSizer( wx.HORIZONTAL )
+
+
+        m_btn_sizer.Add( ( 0, 0), 1, wx.EXPAND, 5 )
+
+        self.m_btn_ok = wx.Button( self, wx.ID_OK, u"Выбрать", wx.DefaultPosition, wx.DefaultSize, 0 )
+        m_btn_sizer.Add( self.m_btn_ok, 0, wx.ALL, 5 )
+
+        self.m_btn_cancel = wx.Button( self, wx.ID_CANCEL, u"Отмена", wx.DefaultPosition, wx.DefaultSize, 0 )
+        m_btn_sizer.Add( self.m_btn_cancel, 0, wx.ALL, 5 )
+
+
+        m_root_sizer.Add( m_btn_sizer, 0, wx.EXPAND, 5 )
+
+
+        self.SetSizer( m_root_sizer )
+        self.Layout()
+
+        self.Centre( wx.BOTH )
+
+    def __del__( self ):
+        pass
 
     # Virtual image path resolution method. Override this in your derived class.
     def get_resource_path( self, bitmap_path ):

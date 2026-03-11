@@ -149,6 +149,7 @@ class CoordinateGrid(gridlib.Grid):
     def __init__(self, parent: wx.Window, on_data_changed=None, **kwargs):
         super().__init__(parent, **kwargs)
         self._busy    = False          # флаг «идёт массовое обновление»
+        self._resize_pending   = False   # ← новый флаг
         self._dec_sep = _sys_dec_sep() # системный разделитель
         self._on_data_changed   = on_data_changed   
         self._text_editor_ctrl = None
@@ -217,7 +218,11 @@ class CoordinateGrid(gridlib.Grid):
 
     def _on_size(self, event):
         event.Skip()
-        if self:
+        # Ставим в очередь не более одного вызова за раз.
+        # Без этой проверки EndBatch() внутри _distribute_col_widths
+        # триггерит EVT_SIZE снова, очередь растёт бесконечно.
+        if self and not self._resize_pending:
+            self._resize_pending = True
             wx.CallAfter(self._distribute_col_widths)
 
     def _distribute_col_widths(self):
@@ -225,6 +230,7 @@ class CoordinateGrid(gridlib.Grid):
         Распределяет ширину гибких столбцов пропорционально их flex-весу,
         заполняя всю доступную ширину клиентской области.
         """
+        self._resize_pending = False   # сбрасываем до любых операций с размерами
         if not self:
             return
         total = self.GetClientSize().width

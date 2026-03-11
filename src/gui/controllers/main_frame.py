@@ -1,5 +1,6 @@
 import wx
 from typing import Dict, List, Optional
+from pyproj import CRS
 
 from core.models import PointPair, CalculationResult
 from gui.forms.easy_helmert_base import BaseMainFrame
@@ -57,6 +58,11 @@ class MainFrame(BaseMainFrame):
             )
         self.m_splitter.SetMinimumPaneSize(120)
 
+        # 3. Целевая СК по умолчанию — WGS 84 (3D)
+        self.source_crs = None
+        self.target_crs = CRS.from_epsg(4979)
+        self.m_lbl_tgt_crs.SetLabel("WGS 84 [EPSG:4979]")
+
     def _setup_layout(self):
         self.Layout()
         # Устанавливаем разделитель на 65% высоты клиентской области
@@ -91,6 +97,10 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_BUTTON, self.on_swap_src,   self.m_btn_swap_src)
         self.Bind(wx.EVT_BUTTON, self.on_swap_dst,   self.m_btn_swap_dst)
         self.Bind(wx.EVT_BUTTON, self.on_calculate,  self.m_btn_calc)
+
+        # Кнопки установки систем координат
+        self.Bind(wx.EVT_BUTTON, self.on_select_source_crs,    self.m_btn_set_src_crs)
+        self.Bind(wx.EVT_BUTTON, self.on_select_target_crs,    self.m_btn_set_tgt_crs)
 
         # Кнопки результатов
         self.Bind(wx.EVT_BUTTON, self.on_copy_wkt,   self.m_btn_copy_wkt)
@@ -451,3 +461,17 @@ class MainFrame(BaseMainFrame):
             "Импорт калибровки",
             wx.OK | wx.ICON_INFORMATION,
         )
+    
+    def on_select_source_crs(self, event):
+        from gui.dialogs.crs_picker_dialog import CrsPickerDialog
+        with CrsPickerDialog(self, "Исходная система координат") as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                self.source_crs = dlg.get_selected_crs()
+                self.m_lbl_src_crs.SetLabel(dlg.get_selected_name())
+
+    def on_select_target_crs(self, event):
+        from gui.dialogs.crs_picker_dialog import CrsPickerDialog
+        with CrsPickerDialog(self, "Целевая система координат") as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                self.target_crs = dlg.get_selected_crs()
+                self.m_lbl_tgt_crs.SetLabel(dlg.get_selected_name())
