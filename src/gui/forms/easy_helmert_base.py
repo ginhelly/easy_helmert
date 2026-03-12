@@ -43,7 +43,7 @@ class BaseMainFrame ( wx.Frame ):
         self.m_menuItem_save_table.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FILE_SAVE,  ) )
         self.m_menu1.Append( self.m_menuItem_save_table )
 
-        self.m_menuItem_export_calibration = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить калибровку...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menuItem_export_calibration = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить таблицу как калибровку...", wx.EmptyString, wx.ITEM_NORMAL )
         self.m_menu1.Append( self.m_menuItem_export_calibration )
 
         self.m_menu1.AppendSeparator()
@@ -97,9 +97,21 @@ class BaseMainFrame ( wx.Frame ):
 
         self.m_toolbar.AddSeparator()
 
-        self.m_tool_calculate = self.m_toolbar.AddTool( wx.ID_ANY, u"Рассчитать калибровку", wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Рассчитать калибровку!", None )
+        self.m_tool_calculate = self.m_toolbar.AddTool( wx.ID_ANY, u"Рассчитать калибровку", wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Вычислить 7 параметров преобразования Гельмерта по введённым точкам", None )
 
         self.m_toolbar.AddSeparator()
+
+        self.m_tool_copy_wkt1 = self.m_toolbar.AddTool( wx.ID_ANY, u"Копировать WKT1", wx.ArtProvider.GetBitmap( wx.ART_COPY,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Копировать подгоняемую систему координат в формате WKT1", None )
+
+        self.m_tool_copy_wkt2 = self.m_toolbar.AddTool( wx.ID_ANY, u"Копировать WKT2", wx.ArtProvider.GetBitmap( wx.ART_COPY,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Копировать подгоняемую систему координат в формате WKT2", None )
+
+        self.m_tool_copy_proj4 = self.m_toolbar.AddTool( wx.ID_ANY, u"Копировать Proj4", wx.ArtProvider.GetBitmap( wx.ART_COPY,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Копировать подгоняемую систему координат в формате Proj4", None )
+
+        self.m_toolbar.AddSeparator()
+
+        self.m_tool_save_table = self.m_toolbar.AddTool( wx.ID_ANY, u"Сохранить таблицу", wx.ArtProvider.GetBitmap( wx.ART_FILE_SAVE,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Сохранить таблицу с входными данными в текстовом формате...", None )
+
+        self.m_tool_export_calibration = self.m_toolbar.AddTool( wx.ID_ANY, u"Экспорт калибровки", wx.ArtProvider.GetBitmap( wx.ART_FLOPPY,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Сохранить таблицу как калибровку в формате контроллера...", None )
 
         self.m_toolbar.Realize()
 

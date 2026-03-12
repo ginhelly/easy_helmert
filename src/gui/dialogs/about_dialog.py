@@ -52,7 +52,8 @@ class AboutDialog(wx.Dialog):
             "и в подходящей для этого топоцентрической СК.\n"
             "\n"
             "Стек: Python · wxPython · pyproj · scipy · pandas\n"
-            "Создана с помощью Claude Sonnet 4.6 и Deepseek"
+            "Создана с помощью Claude Sonnet 4.6 и Deepseek\n"
+            "Иконки by Pixel perfect - Flaticon (https://www.flaticon.com/free-icons/copy)"
         )
 
         lbl_about = wx.StaticText(panel, label=about_text)

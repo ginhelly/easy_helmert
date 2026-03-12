@@ -173,7 +173,7 @@
             <property name="help"></property>
             <property name="id">wxID_ANY</property>
             <property name="kind">wxITEM_NORMAL</property>
-            <property name="label">Сохранить калибровку...</property>
+            <property name="label">Сохранить таблицу как калибровку...</property>
             <property name="name">m_menuItem_export_calibration</property>
             <property name="permission">none</property>
             <property name="shortcut"></property>
@@ -408,11 +408,69 @@
           <property name="label">Рассчитать калибровку</property>
           <property name="name">m_tool_calculate</property>
           <property name="permission">protected</property>
-          <property name="statusbar">Рассчитать калибровку!</property>
+          <property name="statusbar">Вычислить 7 параметров преобразования Гельмерта по введённым точкам</property>
           <property name="tooltip"></property>
         </object>
         <object class="toolSeparator" expanded="true">
           <property name="permission">protected</property>
+        </object>
+        <object class="tool" expanded="true">
+          <property name="bitmap">Load From Art Provider; wxART_COPY; </property>
+          <property name="context_menu">0</property>
+          <property name="id">wxID_ANY</property>
+          <property name="kind">wxITEM_NORMAL</property>
+          <property name="label">Копировать WKT1</property>
+          <property name="name">m_tool_copy_wkt1</property>
+          <property name="permission">protected</property>
+          <property name="statusbar">Копировать подгоняемую систему координат в формате WKT1</property>
+          <property name="tooltip"></property>
+        </object>
+        <object class="tool" expanded="true">
+          <property name="bitmap">Load From Art Provider; wxART_COPY; </property>
+          <property name="context_menu">0</property>
+          <property name="id">wxID_ANY</property>
+          <property name="kind">wxITEM_NORMAL</property>
+          <property name="label">Копировать WKT2</property>
+          <property name="name">m_tool_copy_wkt2</property>
+          <property name="permission">protected</property>
+          <property name="statusbar">Копировать подгоняемую систему координат в формате WKT2</property>
+          <property name="tooltip"></property>
+        </object>
+        <object class="tool" expanded="true">
+          <property name="bitmap">Load From Art Provider; wxART_COPY; </property>
+          <property name="context_menu">0</property>
+          <property name="id">wxID_ANY</property>
+          <property name="kind">wxITEM_NORMAL</property>
+          <property name="label">Копировать Proj4</property>
+          <property name="name">m_tool_copy_proj4</property>
+          <property name="permission">protected</property>
+          <property name="statusbar">Копировать подгоняемую систему координат в формате Proj4</property>
+          <property name="tooltip"></property>
+        </object>
+        <object class="toolSeparator" expanded="true">
+          <property name="permission">protected</property>
+        </object>
+        <object class="tool" expanded="true">
+          <property name="bitmap">Load From Art Provider; wxART_FILE_SAVE; </property>
+          <property name="context_menu">0</property>
+          <property name="id">wxID_ANY</property>
+          <property name="kind">wxITEM_NORMAL</property>
+          <property name="label">Сохранить таблицу</property>
+          <property name="name">m_tool_save_table</property>
+          <property name="permission">protected</property>
+          <property name="statusbar">Сохранить таблицу с входными данными в текстовом формате...</property>
+          <property name="tooltip"></property>
+        </object>
+        <object class="tool" expanded="true">
+          <property name="bitmap">Load From Art Provider; wxART_FLOPPY; </property>
+          <property name="context_menu">0</property>
+          <property name="id">wxID_ANY</property>
+          <property name="kind">wxITEM_NORMAL</property>
+          <property name="label">Экспорт калибровки</property>
+          <property name="name">m_tool_export_calibration</property>
+          <property name="permission">protected</property>
+          <property name="statusbar">Сохранить таблицу как калибровку в формате контроллера...</property>
+          <property name="tooltip"></property>
         </object>
       </object>
       <object class="wxBoxSizer" expanded="true">

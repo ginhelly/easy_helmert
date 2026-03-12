@@ -1,6 +1,6 @@
 [project]
 name = "easy-helmert"
-version = "0.1.0"
+version = "0.8.0"
 description = "Утилита для вычисления 7 параметров перехода из одной системы координат в другую"
 readme = "README.md"
 requires-python = ">=3.12"

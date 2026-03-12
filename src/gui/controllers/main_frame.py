@@ -127,19 +127,27 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_MENU, lambda e: self._copy_crs_to_clipboard("proj4"),  self.m_menuItem_copy_proj4)
 
         # WKT2 — только наличие результата
-        for item in (self.m_menuItem_save_wkt2, self.m_menuItem_copy_wkt2):
+        for item in (self.m_menuItem_save_wkt2, self.m_menuItem_copy_wkt2, self.m_tool_copy_wkt2):
             self.Bind(wx.EVT_UPDATE_UI, self._on_update_export_ui, item)
 
         # WKT1 и Proj4 — результат + целевая WGS84
         for item in (
             self.m_menuItem_save_wkt1,  self.m_menuItem_save_proj4,
             self.m_menuItem_copy_wkt1,  self.m_menuItem_copy_proj4,
+            self.m_tool_copy_wkt1,      self.m_tool_copy_proj4
         ):
             self.Bind(wx.EVT_UPDATE_UI, self._on_update_towgs84_ui, item)
         
         self.Bind(wx.EVT_MENU, self._save_table_to_file, self.m_menuItem_save_table)
         self.Bind(wx.EVT_MENU, self.on_export_calibration, self.m_menuItem_export_calibration)
         self.Bind(wx.EVT_MENU, self.on_about, self.m_menuItem_about)
+
+        self.Bind(wx.EVT_TOOL, self.on_calculate, self.m_tool_calculate)
+        self.Bind(wx.EVT_TOOL, lambda e: self._copy_crs_to_clipboard("wkt1"), self.m_tool_copy_wkt1)
+        self.Bind(wx.EVT_TOOL, lambda e: self._copy_crs_to_clipboard("wkt2"), self.m_tool_copy_wkt2)
+        self.Bind(wx.EVT_TOOL, lambda e: self._copy_crs_to_clipboard("proj4"), self.m_tool_copy_proj4)
+        self.Bind(wx.EVT_TOOL, self._save_table_to_file, self.m_tool_save_table)
+        self.Bind(wx.EVT_TOOL, self.on_export_calibration, self.m_tool_export_calibration)
 
     def _on_update_export_ui(self, event):
         event.Enable(self.calc_result is not None)
@@ -419,7 +427,12 @@ class MainFrame(BaseMainFrame):
     # ── Toolbar / Menu icons (без изменений) ──────────────────────────────────
 
     def _setup_toolbar_icons(self):
-        tool_icons = {"Импорт калибровки...": "import_icon"}
+        tool_icons = {
+            "Импорт калибровки...": "import_icon",
+            "Копировать WKT1": "copy_wkt1_icon",
+            "Копировать WKT2": "copy_wkt2_icon",
+            "Копировать Proj4": "copy_proj4_icon"
+        }
         for pos in range(self.m_toolbar.GetToolsCount()):
             tool = self.m_toolbar.GetToolByPos(pos)
             if tool and tool.GetLabel() in tool_icons:
