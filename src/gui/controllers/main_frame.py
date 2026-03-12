@@ -139,6 +139,7 @@ class MainFrame(BaseMainFrame):
         
         self.Bind(wx.EVT_MENU, self._save_table_to_file, self.m_menuItem_save_table)
         self.Bind(wx.EVT_MENU, self.on_export_calibration, self.m_menuItem_export_calibration)
+        self.Bind(wx.EVT_MENU, self.on_about, self.m_menuItem_about)
 
     def _on_update_export_ui(self, event):
         event.Enable(self.calc_result is not None)
@@ -759,7 +760,7 @@ class MainFrame(BaseMainFrame):
             if fmt == "wkt1":
                 return to_wkt1(self.source_crs, self.calc_result.params, display_name)
             elif fmt == "wkt2":
-                return to_wkt2(self.source_crs, self.calc_result.params, display_name)
+                return to_wkt2(self.source_crs, self.calc_result.params, display_name, self.target_crs)
             elif fmt == "proj4":
                 return to_proj4(self.source_crs, self.calc_result.params)
         except Exception as e:
@@ -857,3 +858,8 @@ class MainFrame(BaseMainFrame):
             save_calibration_file(filepath, points)
         except (UnsupportedFormatError, IOError, ValueError) as e:
             wx.MessageBox(str(e), "Ошибка экспорта", wx.OK | wx.ICON_ERROR)
+
+    def on_about(self, event):
+        from gui.dialogs.about_dialog import AboutDialog
+        with AboutDialog(self) as dlg:
+            dlg.ShowModal()

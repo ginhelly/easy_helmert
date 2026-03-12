@@ -219,7 +219,8 @@ def to_wkt1(source_crs: CRS, params: TransformationParams,
 
 
 def to_wkt2(source_crs: CRS, params: TransformationParams,
-            display_name: str = "") -> str:
+            display_name: str = "",
+            target_crs: CRS = None) -> str:
     """WKT2-2019 BoundCRS с исправленным именем source CRS."""
     base = _base(source_crs)
     try:
@@ -230,7 +231,12 @@ def to_wkt2(source_crs: CRS, params: TransformationParams,
     src_wkt = source_3d.to_wkt(version="WKT2_2019")
     src_wkt = _replace_crs_name(src_wkt, display_name)
 
-    tgt_wkt = CRS.from_epsg(4979).to_wkt(version="WKT2_2019")
+    _tgt = target_crs if target_crs is not None else CRS.from_epsg(4979)
+    try:
+        tgt_3d  = _tgt.to_3d()
+    except Exception:
+        tgt_3d  = _tgt
+    tgt_wkt = tgt_3d.to_wkt(version="WKT2_2019")
     p       = params
 
     lines = [

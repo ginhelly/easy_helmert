@@ -78,9 +78,9 @@ class BaseMainFrame ( wx.Frame ):
         self.m_menubar1.Append( self.m_menu3, u"Вычисленные параметры" )
 
         self.m_menu2 = wx.Menu()
-        self.m_menuItem8 = wx.MenuItem( self.m_menu2, wx.ID_ANY, u"О программе", wx.EmptyString, wx.ITEM_NORMAL )
-        self.m_menuItem8.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_HELP_PAGE,  ) )
-        self.m_menu2.Append( self.m_menuItem8 )
+        self.m_menuItem_about = wx.MenuItem( self.m_menu2, wx.ID_ANY, u"О программе", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menuItem_about.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_HELP_PAGE,  ) )
+        self.m_menu2.Append( self.m_menuItem_about )
 
         self.m_menubar1.Append( self.m_menu2, u"Программа" )
 
