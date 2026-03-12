@@ -174,7 +174,7 @@
             <property name="id">wxID_ANY</property>
             <property name="kind">wxITEM_NORMAL</property>
             <property name="label">Сохранить калибровку...</property>
-            <property name="name">m_menuItem6</property>
+            <property name="name">m_menuItem_export_calibration</property>
             <property name="permission">none</property>
             <property name="shortcut"></property>
             <property name="unchecked_bitmap"></property>

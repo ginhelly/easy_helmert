@@ -138,6 +138,7 @@ class MainFrame(BaseMainFrame):
             self.Bind(wx.EVT_UPDATE_UI, self._on_update_towgs84_ui, item)
         
         self.Bind(wx.EVT_MENU, self._save_table_to_file, self.m_menuItem_save_table)
+        self.Bind(wx.EVT_MENU, self.on_export_calibration, self.m_menuItem_export_calibration)
 
     def _on_update_export_ui(self, event):
         event.Enable(self.calc_result is not None)
@@ -815,3 +816,44 @@ class MainFrame(BaseMainFrame):
             finally:
                 wx.TheClipboard.Close()
             
+    def on_export_calibration(self, event):
+        """Экспорт текущей таблицы в файл калибровки."""
+        from core.calibration_importers import (
+            save_calibration_file, export_wildcard,
+            UnsupportedFormatError, CalibrationPoint,
+        )
+
+        data = self.coord_grid.get_data()
+        if not data:
+            wx.MessageBox("Таблица пуста.", "Нет данных", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        with wx.FileDialog(
+            self, "Экспорт файла калибровки",
+            wildcard=export_wildcard(),
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+        ) as dlg:
+            dlg.SetFilename("calibration.loc")
+            if dlg.ShowModal() == wx.ID_CANCEL:
+                return
+            filepath = dlg.GetPath()
+
+        points = [
+            CalibrationPoint(
+                name         = d.get("name", ""),
+                x1           = d.get("x1",   ""),
+                y1           = d.get("y1",   ""),
+                h1           = d.get("h1",   ""),
+                x2           = d.get("x2",   ""),
+                y2           = d.get("y2",   ""),
+                h2           = d.get("h2",   ""),
+                enabled_plan = d.get("enabled_plan", True),
+                enabled_h    = d.get("enabled_h",    True),
+            )
+            for d in data
+        ]
+
+        try:
+            save_calibration_file(filepath, points)
+        except (UnsupportedFormatError, IOError, ValueError) as e:
+            wx.MessageBox(str(e), "Ошибка экспорта", wx.OK | wx.ICON_ERROR)

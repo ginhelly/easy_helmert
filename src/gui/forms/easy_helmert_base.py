@@ -43,8 +43,8 @@ class BaseMainFrame ( wx.Frame ):
         self.m_menuItem_save_table.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FILE_SAVE,  ) )
         self.m_menu1.Append( self.m_menuItem_save_table )
 
-        self.m_menuItem6 = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить калибровку...", wx.EmptyString, wx.ITEM_NORMAL )
-        self.m_menu1.Append( self.m_menuItem6 )
+        self.m_menuItem_export_calibration = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить калибровку...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu1.Append( self.m_menuItem_export_calibration )
 
         self.m_menu1.AppendSeparator()
 
