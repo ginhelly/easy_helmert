@@ -104,9 +104,9 @@ _COL_DEFS: List[Tuple[str, int, bool, float]] = [
     ("Восток исх.", 90, False, 1.2),   # X1
     ("Север исх.", 90, False, 1.2),   # Y1
     ("Высота исх.", 82, False, 1.0),   # H1
-    ("Восток цел.", 90, False, 1.2),   # X2
-    ("Север цел.", 90, False, 1.2),   # Y2
-    ("Высота цел.", 82, False, 1.0),   # H2
+    ("Восток опорн.", 90, False, 1.2),   # X2
+    ("Север опорн.", 90, False, 1.2),   # Y2
+    ("Высота опорн.", 82, False, 1.0),   # H2
     ("ΔX, м",   72, True,  0.8),   # геоцентрические невязки, метры
     ("ΔY, м",   72, True,  0.8),
     ("ΔZ, м",   72, True,  0.8),
@@ -132,7 +132,7 @@ _CLR_OK  = wx.Colour(198, 239, 206)   # зелёный — норма
 _CLR_BAD = wx.Colour(255, 199, 206)   # красный — превышение
 _CLR_NA  = wx.Colour(235, 235, 235)   # серый   — нет данных
 
-_DEFAULT_THRESHOLD = 0.05             # порог подсветки (единицы СК)
+_DEFAULT_THRESHOLD = 0.1              # порог подсветки (единицы СК)
 
 def _row_noun_ru(n: int) -> str:
     """'строку' / '2 строки' / '5 строк' — склонение для меню."""
@@ -643,15 +643,15 @@ class CoordinateGrid(gridlib.Grid):
         # ── Swap X↔Y ─────────────────────────────────────────────────────
         id_swap_src = wx.NewIdRef()
         id_swap_dst = wx.NewIdRef()
-        menu.Append(id_swap_src, "Север ↔ Восток   исходные  (выделенные строки)")
-        menu.Append(id_swap_dst, "Север ↔ Восток   целевые   (выделенные строки)")
+        menu.Append(id_swap_src, "Север ↔ Восток   подгоняемые  (выделенные строки)")
+        menu.Append(id_swap_dst, "Север ↔ Восток   опорные   (выделенные строки)")
 
         # ── Разделитель + глобальный swap для удобства ───────────────────
         menu.AppendSeparator()
         id_swap_src_all = wx.NewIdRef()
         id_swap_dst_all = wx.NewIdRef()
-        menu.Append(id_swap_src_all, "Север ↔ Восток   исходные  (все строки)")
-        menu.Append(id_swap_dst_all, "Север ↔ Восток   целевые   (все строки)")
+        menu.Append(id_swap_src_all, "Север ↔ Восток   подгоняемые  (все строки)")
+        menu.Append(id_swap_dst_all, "Север ↔ Восток   опорные   (все строки)")
 
         # Недоступность «Удалить», если строк и так минимум
         if self.GetNumberRows() <= self.MIN_ROWS:

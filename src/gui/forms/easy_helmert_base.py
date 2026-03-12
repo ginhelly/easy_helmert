@@ -39,15 +39,12 @@ class BaseMainFrame ( wx.Frame ):
 
         self.m_menu1.AppendSeparator()
 
-        self.m_menuItem2 = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить таблицу в файл..."+ u"\t" + u"CTRL+S", wx.EmptyString, wx.ITEM_NORMAL )
-        self.m_menuItem2.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FILE_SAVE,  ) )
-        self.m_menu1.Append( self.m_menuItem2 )
+        self.m_menuItem_save_table = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить таблицу в файл..."+ u"\t" + u"CTRL+S", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menuItem_save_table.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FILE_SAVE,  ) )
+        self.m_menu1.Append( self.m_menuItem_save_table )
 
         self.m_menuItem6 = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить калибровку...", wx.EmptyString, wx.ITEM_NORMAL )
         self.m_menu1.Append( self.m_menuItem6 )
-
-        self.m_menuItem7 = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить WKT...", wx.EmptyString, wx.ITEM_NORMAL )
-        self.m_menu1.Append( self.m_menuItem7 )
 
         self.m_menu1.AppendSeparator()
 
@@ -56,6 +53,29 @@ class BaseMainFrame ( wx.Frame ):
         self.m_menu1.Append( self.m_exit_item )
 
         self.m_menubar1.Append( self.m_menu1, u"Файл" )
+
+        self.m_menu3 = wx.Menu()
+        self.m_menuItem_save_wkt1 = wx.MenuItem( self.m_menu3, wx.ID_ANY, u"Сохранить как WKT...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu3.Append( self.m_menuItem_save_wkt1 )
+
+        self.m_menuItem_save_wkt2 = wx.MenuItem( self.m_menu3, wx.ID_ANY, u"Сохранить как WKT2...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu3.Append( self.m_menuItem_save_wkt2 )
+
+        self.m_menuItem_save_proj4 = wx.MenuItem( self.m_menu3, wx.ID_ANY, u"Сохранить как Proj4...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu3.Append( self.m_menuItem_save_proj4 )
+
+        self.m_menu3.AppendSeparator()
+
+        self.m_menuItem_copy_wkt1 = wx.MenuItem( self.m_menu3, wx.ID_ANY, u"Копировать WKT в буфер обмена", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu3.Append( self.m_menuItem_copy_wkt1 )
+
+        self.m_menuItem_copy_wkt2 = wx.MenuItem( self.m_menu3, wx.ID_ANY, u"Копировать WKT2 в буфер обмена", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu3.Append( self.m_menuItem_copy_wkt2 )
+
+        self.m_menuItem_copy_proj4 = wx.MenuItem( self.m_menu3, wx.ID_ANY, u"Копировать Proj4 в буфер обмена", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu3.Append( self.m_menuItem_copy_proj4 )
+
+        self.m_menubar1.Append( self.m_menu3, u"Вычисленные параметры" )
 
         self.m_menu2 = wx.Menu()
         self.m_menuItem8 = wx.MenuItem( self.m_menu2, wx.ID_ANY, u"О программе", wx.EmptyString, wx.ITEM_NORMAL )
@@ -77,7 +97,9 @@ class BaseMainFrame ( wx.Frame ):
 
         self.m_toolbar.AddSeparator()
 
-        self.m_tool6 = self.m_toolbar.AddTool( wx.ID_ANY, u"Рассчитать калибровку", wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Рассчитать калибровку!", None )
+        self.m_tool_calculate = self.m_toolbar.AddTool( wx.ID_ANY, u"Рассчитать калибровку", wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Рассчитать калибровку!", None )
+
+        self.m_toolbar.AddSeparator()
 
         self.m_toolbar.Realize()
 
@@ -127,7 +149,7 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerTableHeader.Add( self.m_btn_swap_src, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
 
-        self.m_btn_swap_dst = wx.Button( self.m_panel_input, wx.ID_ANY, u"X↔Y цел.", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_btn_swap_dst = wx.Button( self.m_panel_input, wx.ID_ANY, u"X↔Y опорн.", wx.DefaultPosition, wx.DefaultSize, 0 )
 
         self.m_btn_swap_dst.SetBitmap( wx.NullBitmap )
         self.m_btn_swap_dst.SetToolTip( u"Поменять местами X и Y у точек в ЦЕЛЕВОЙ системе" )
@@ -137,48 +159,87 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerInput.Add( bSizerTableHeader, 0, wx.EXPAND, 5 )
 
-        bSizerCRSSettings = wx.BoxSizer( wx.HORIZONTAL )
+        bSizerGrid = wx.BoxSizer( wx.HORIZONTAL )
 
-        self.m_staticText4 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"ИСХОДНАЯ СК:", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.m_staticText4.Wrap( -1 )
+        bSizerGridSettings = wx.BoxSizer( wx.VERTICAL )
 
-        bSizerCRSSettings.Add( self.m_staticText4, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+        bSizerGridSettings.SetMinSize( wx.Size( 250,250 ) )
+        self.m_staticText151 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Настройки входных данных", wx.DefaultPosition, wx.Size( 320,-1 ), 0 )
+        self.m_staticText151.Wrap( -1 )
 
-        self.m_lbl_src_crs = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Не выбрана", wx.DefaultPosition, wx.Size( 250,-1 ), wx.ST_ELLIPSIZE_MIDDLE )
+        bSizerGridSettings.Add( self.m_staticText151, 0, wx.ALL, 5 )
+
+        sbSizer3 = wx.StaticBoxSizer( wx.StaticBox( self.m_panel_input, wx.ID_ANY, u"Подгоняемая система координат" ), wx.HORIZONTAL )
+
+        self.m_lbl_src_crs = wx.StaticText( sbSizer3.GetStaticBox(), wx.ID_ANY, u"Не выбрана", wx.DefaultPosition, wx.Size( 250,-1 ), wx.ST_ELLIPSIZE_MIDDLE )
         self.m_lbl_src_crs.Wrap( -1 )
 
         self.m_lbl_src_crs.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
-        self.m_lbl_src_crs.SetMaxSize( wx.Size( 250,-1 ) )
 
-        bSizerCRSSettings.Add( self.m_lbl_src_crs, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+        sbSizer3.Add( self.m_lbl_src_crs, 1, wx.ALIGN_CENTER|wx.ALL, 5 )
 
-        self.m_btn_set_src_crs = wx.Button( self.m_panel_input, wx.ID_ANY, u"Исходная СК...", wx.DefaultPosition, wx.DefaultSize, 0 )
-        bSizerCRSSettings.Add( self.m_btn_set_src_crs, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+        self.m_btn_set_src_crs = wx.Button( sbSizer3.GetStaticBox(), wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.Size( 32,-1 ), 0 )
+
+        self.m_btn_set_src_crs.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FIND,  ) )
+        sbSizer3.Add( self.m_btn_set_src_crs, 0, wx.ALIGN_CENTER, 5 )
 
 
-        bSizerCRSSettings.Add( ( 0, 0), 1, wx.EXPAND, 5 )
+        bSizerGridSettings.Add( sbSizer3, 0, wx.EXPAND|wx.LEFT|wx.RIGHT, 5 )
 
-        self.m_staticText41 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"ЦЕЛЕВАЯ СК:", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.m_staticText41.Wrap( -1 )
+        sbSizer31 = wx.StaticBoxSizer( wx.StaticBox( self.m_panel_input, wx.ID_ANY, u"Опорная система координат" ), wx.HORIZONTAL )
 
-        bSizerCRSSettings.Add( self.m_staticText41, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
-
-        self.m_lbl_tgt_crs = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Не выбрана", wx.DefaultPosition, wx.Size( 250,-1 ), wx.ST_ELLIPSIZE_MIDDLE )
+        self.m_lbl_tgt_crs = wx.StaticText( sbSizer31.GetStaticBox(), wx.ID_ANY, u"Не выбрана", wx.DefaultPosition, wx.Size( 250,-1 ), wx.ST_ELLIPSIZE_MIDDLE )
         self.m_lbl_tgt_crs.Wrap( -1 )
 
         self.m_lbl_tgt_crs.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
-        self.m_lbl_tgt_crs.SetMaxSize( wx.Size( 250,-1 ) )
 
-        bSizerCRSSettings.Add( self.m_lbl_tgt_crs, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+        sbSizer31.Add( self.m_lbl_tgt_crs, 1, wx.ALIGN_CENTER|wx.ALL, 5 )
 
-        self.m_btn_set_tgt_crs = wx.Button( self.m_panel_input, wx.ID_ANY, u"Целевая СК...", wx.DefaultPosition, wx.DefaultSize, 0 )
-        bSizerCRSSettings.Add( self.m_btn_set_tgt_crs, 0, wx.ALL, 5 )
+        self.m_btn_set_tgt_crs = wx.Button( sbSizer31.GetStaticBox(), wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.Size( 32,-1 ), 0 )
+
+        self.m_btn_set_tgt_crs.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FIND,  ) )
+        sbSizer31.Add( self.m_btn_set_tgt_crs, 0, wx.ALIGN_CENTER, 5 )
 
 
-        bSizerInput.Add( bSizerCRSSettings, 0, wx.EXPAND, 5 )
+        bSizerGridSettings.Add( sbSizer31, 0, wx.EXPAND|wx.LEFT|wx.RIGHT, 5 )
+
+        bSizer27 = wx.BoxSizer( wx.HORIZONTAL )
+
+        self.m_staticText21 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Подсв. красным невязки >", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText21.Wrap( -1 )
+
+        bSizer27.Add( self.m_staticText21, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+        self.m_spin_bad_threshold = wx.SpinCtrlDouble( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 0, 100, 0.1, 1 )
+        self.m_spin_bad_threshold.SetDigits( 2 )
+        bSizer27.Add( self.m_spin_bad_threshold, 0, wx.ALL, 5 )
+
+        m_choice_bad_unitsChoices = [ u"СКО", u"метров" ]
+        self.m_choice_bad_units = wx.Choice( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_bad_unitsChoices, 0 )
+        self.m_choice_bad_units.SetSelection( 1 )
+        bSizer27.Add( self.m_choice_bad_units, 1, wx.ALL, 5 )
+
+
+        bSizerGridSettings.Add( bSizer27, 0, wx.EXPAND, 5 )
+
+
+        bSizerGridSettings.Add( ( 0, 0), 1, wx.EXPAND, 5 )
+
+        self.m_btn_calc = wx.Button( self.m_panel_input, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.Size( 150,-1 ), wx.BU_EXACTFIT )
+
+        self.m_btn_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
+        self.m_btn_calc.SetMinSize( wx.Size( 150,-1 ) )
+
+        bSizerGridSettings.Add( self.m_btn_calc, 0, wx.ALL|wx.FIXED_MINSIZE|wx.EXPAND, 5 )
+
+
+        bSizerGrid.Add( bSizerGridSettings, 0, wx.EXPAND, 5 )
 
         self.m_grid_placeholder = wx.Panel( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
-        bSizerInput.Add( self.m_grid_placeholder, 1, wx.EXPAND |wx.ALL, 2 )
+        bSizerGrid.Add( self.m_grid_placeholder, 1, wx.EXPAND |wx.ALL, 2 )
+
+
+        bSizerInput.Add( bSizerGrid, 1, wx.EXPAND, 5 )
 
 
         self.m_panel_input.SetSizer( bSizerInput )
@@ -197,40 +258,14 @@ class BaseMainFrame ( wx.Frame ):
         bSizerResultHeader.Add( self.m_lbl_result, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
 
 
-        bSizerResultHeader.Add( ( 0, 0), 1, wx.EXPAND, 5 )
-
-        self.m_btn_calc = wx.Button( self.m_panel_result, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.Size( 150,-1 ), wx.BU_EXACTFIT )
-
-        self.m_btn_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
-        self.m_btn_calc.SetMinSize( wx.Size( 150,-1 ) )
-
-        bSizerResultHeader.Add( self.m_btn_calc, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
-
-        self.m_staticline5 = wx.StaticLine( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_HORIZONTAL )
-        bSizerResultHeader.Add( self.m_staticline5, 0, wx.EXPAND |wx.ALL, 5 )
-
-        self.m_btn_copy_wkt = wx.Button( self.m_panel_result, wx.ID_ANY, u"Копировать WKT", wx.DefaultPosition, wx.DefaultSize, 0 )
-        bSizerResultHeader.Add( self.m_btn_copy_wkt, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
-
-        self.m_btn_copy_proj4 = wx.Button( self.m_panel_result, wx.ID_ANY, u"Копировать Proj4", wx.DefaultPosition, wx.DefaultSize, 0 )
-        bSizerResultHeader.Add( self.m_btn_copy_proj4, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
-
-        self.m_btn_save_result = wx.Button( self.m_panel_result, wx.ID_ANY, u"Сохранить калибровку...", wx.DefaultPosition, wx.DefaultSize, 0 )
-
-        self.m_btn_save_result.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_FILE_SAVE_AS,  ) )
-        self.m_btn_save_result.SetMinSize( wx.Size( 150,-1 ) )
-
-        bSizerResultHeader.Add( self.m_btn_save_result, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
-
-
         bSizerResult.Add( bSizerResultHeader, 0, wx.EXPAND, 5 )
 
         bSizer15 = wx.BoxSizer( wx.HORIZONTAL )
 
         bSizer17 = wx.BoxSizer( wx.VERTICAL )
 
-        bSizer17.SetMinSize( wx.Size( -1,250 ) )
-        self.m_staticText15 = wx.StaticText( self.m_panel_result, wx.ID_ANY, u"Настройки вывода параметров", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer17.SetMinSize( wx.Size( 250,250 ) )
+        self.m_staticText15 = wx.StaticText( self.m_panel_result, wx.ID_ANY, u"Настройки вывода параметров", wx.DefaultPosition, wx.Size( 320,-1 ), 0 )
         self.m_staticText15.Wrap( -1 )
 
         bSizer17.Add( self.m_staticText15, 0, wx.ALL, 5 )
@@ -242,7 +277,7 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizer17.Add( self.m_rb_method, 0, wx.ALL|wx.EXPAND, 5 )
 
-        m_rb_directionChoices = [ u"Из исходной -> в целевую", u"Из целевой -> в исходную" ]
+        m_rb_directionChoices = [ u"Из исходной -> в опорную", u"Из опорной -> в исходную" ]
         self.m_rb_direction = wx.RadioBox( self.m_panel_result, wx.ID_ANY, u"Направление параметров", wx.DefaultPosition, wx.DefaultSize, m_rb_directionChoices, 1, wx.RA_SPECIFY_COLS )
         self.m_rb_direction.SetSelection( 0 )
         bSizer17.Add( self.m_rb_direction, 0, wx.ALL|wx.EXPAND, 5 )

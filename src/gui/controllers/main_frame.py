@@ -29,6 +29,7 @@ class MainFrame(BaseMainFrame):
         self._bind_events()
         self._setup_toolbar_icons()
         wx.CallAfter(self.adjust_menu_icons)
+        self._bind_hints()
 
         self.Centre()
         self.Show()
@@ -61,7 +62,6 @@ class MainFrame(BaseMainFrame):
         # 3. Целевая СК по умолчанию — WGS 84 (3D)
         self.source_crs = None
         self.target_crs = CRS.from_epsg(4979)
-        self.result_crs = None
         self.m_lbl_tgt_crs.SetLabel("WGS 84 [EPSG:4979]")
 
     def _setup_layout(self):
@@ -103,11 +103,6 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_BUTTON, self.on_select_source_crs,    self.m_btn_set_src_crs)
         self.Bind(wx.EVT_BUTTON, self.on_select_target_crs,    self.m_btn_set_tgt_crs)
 
-        # Кнопки результатов
-        self.Bind(wx.EVT_BUTTON, self.on_copy_wkt,   self.m_btn_copy_wkt)
-        self.Bind(wx.EVT_BUTTON, self.on_copy_proj4, self.m_btn_copy_proj4)
-        self.Bind(wx.EVT_BUTTON, self.on_save_result,self.m_btn_save_result)
-
         for ctrl in (
             self.m_rb_method,
             self.m_rb_direction,
@@ -118,6 +113,43 @@ class MainFrame(BaseMainFrame):
                 wx.EVT_RADIOBOX if isinstance(ctrl, wx.RadioBox) else wx.EVT_CHOICE,
                 self._on_display_settings_changed,
             )
+        
+        self.m_spin_bad_threshold.Bind(wx.EVT_SPINCTRLDOUBLE, self._on_threshold_changed)
+        self.m_choice_bad_units.Bind(wx.EVT_CHOICE, self._on_threshold_changed)
+        self.m_spin_bad_threshold.Bind(wx.EVT_TEXT_ENTER, self._on_threshold_changed)
+
+            # ── Экспорт результата (меню) ────────────────────────────────────────
+        self.Bind(wx.EVT_MENU, lambda e: self._save_crs_to_file("wkt1"),        self.m_menuItem_save_wkt1)
+        self.Bind(wx.EVT_MENU, lambda e: self._save_crs_to_file("wkt2"),        self.m_menuItem_save_wkt2)
+        self.Bind(wx.EVT_MENU, lambda e: self._save_crs_to_file("proj4"),       self.m_menuItem_save_proj4)
+        self.Bind(wx.EVT_MENU, lambda e: self._copy_crs_to_clipboard("wkt1"),   self.m_menuItem_copy_wkt1)
+        self.Bind(wx.EVT_MENU, lambda e: self._copy_crs_to_clipboard("wkt2"),   self.m_menuItem_copy_wkt2)
+        self.Bind(wx.EVT_MENU, lambda e: self._copy_crs_to_clipboard("proj4"),  self.m_menuItem_copy_proj4)
+
+        # WKT2 — только наличие результата
+        for item in (self.m_menuItem_save_wkt2, self.m_menuItem_copy_wkt2):
+            self.Bind(wx.EVT_UPDATE_UI, self._on_update_export_ui, item)
+
+        # WKT1 и Proj4 — результат + целевая WGS84
+        for item in (
+            self.m_menuItem_save_wkt1,  self.m_menuItem_save_proj4,
+            self.m_menuItem_copy_wkt1,  self.m_menuItem_copy_proj4,
+        ):
+            self.Bind(wx.EVT_UPDATE_UI, self._on_update_towgs84_ui, item)
+        
+        self.Bind(wx.EVT_MENU, self._save_table_to_file, self.m_menuItem_save_table)
+
+    def _on_update_export_ui(self, event):
+        event.Enable(self.calc_result is not None)
+
+    def _on_update_towgs84_ui(self, event):
+        from utils.crs_export import is_wgs84_target
+        ok = (
+            self.calc_result is not None
+            and getattr(self, "target_crs", None) is not None
+            and is_wgs84_target(self.target_crs)
+        )
+        event.Enable(ok)
 
     def _on_display_settings_changed(self, event):
         if self.calc_result is not None:
@@ -237,19 +269,7 @@ class MainFrame(BaseMainFrame):
                 all_residuals[i] = result.residuals[j]
                 j += 1
 
-        self.coord_grid.update_residuals(all_residuals)
         self.update_results(result)
-
-        # Формируем результирующую СК с вшитыми параметрами TOWGS84
-        try:
-            from utils.crs_utils import make_bound_crs
-            self.result_crs = make_bound_crs(self.source_crs, result.params)
-        except Exception as e:
-            self.result_crs = None
-            wx.MessageBox(
-                f"Параметры вычислены, но создать результирующую СК не удалось:\n{e}",
-                "Предупреждение", wx.OK | wx.ICON_WARNING,
-            )
         
         # Метрические невязки dE / dN / dU
         # ENU-невязки уже в result.residuals_enu
@@ -259,7 +279,14 @@ class MainFrame(BaseMainFrame):
             if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
                 all_metric[i] = result.residuals_enu[j]
                 j += 1
-        self.coord_grid.update_metric_residuals(all_metric)
+        
+        threshold = self._get_threshold_m()
+
+        self._last_all_residuals = all_residuals
+        self.coord_grid.update_residuals(all_residuals, threshold=threshold)
+
+        self._last_all_metric = all_metric
+        self.coord_grid.update_metric_residuals(all_metric, threshold=threshold)
     
     def _read_display_settings(self) -> DisplaySettings:
         return DisplaySettings(
@@ -302,34 +329,69 @@ class MainFrame(BaseMainFrame):
                         self.target_crs.name)
         return "целевая"
 
-    def on_copy_wkt(self, event):
-        text = self.m_txt_result.GetValue()
-        if not text:
+    def _save_table_to_file(self, event):
+        """Сохраняет таблицу координат в CSV-файл."""
+        data = self.coord_grid.get_data()
+        if not data:
+            wx.MessageBox("Таблица пуста — нечего сохранять.",
+                        "Нет данных", wx.OK | wx.ICON_INFORMATION)
             return
-        if wx.TheClipboard.Open():
-            try:
-                wx.TheClipboard.SetData(wx.TextDataObject(text))
-            finally:
-                wx.TheClipboard.Close()
 
-    def on_copy_proj4(self, event):
-        # TODO: форматировать как Proj4 строку из self.calc_result
-        wx.MessageBox("Proj4 экспорт: заглушка", "Инфо")
-
-    def on_save_result(self, event):
         with wx.FileDialog(
-            self, "Сохранить параметры",
-            wildcard="WKT (*.wkt)|*.wkt|Proj4 (*.txt)|*.txt|Все файлы (*.*)|*.*",
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT
+            self,
+            "Сохранить таблицу точек",
+            wildcard=(
+                "CSV файл (*.csv)|*.csv"
+                "|Текстовый файл (*.txt)|*.txt"
+                "|Все файлы (*.*)|*.*"
+            ),
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
         ) as dlg:
+            dlg.SetFilename("points.csv")
             if dlg.ShowModal() == wx.ID_CANCEL:
                 return
             path = dlg.GetPath()
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(self.m_txt_result.GetValue())
-            except IOError as e:
-                wx.MessageBox(str(e), "Ошибка записи", wx.OK | wx.ICON_ERROR)
+
+        # Определяем разделитель по расширению
+        ext = path.rsplit(".", 1)[-1].lower()
+        sep = ";" if ext == "csv" else "\t"
+
+        src_name = self._src_crs_name()
+        tgt_name = self._tgt_crs_name()
+
+        header = sep.join([
+            "Включён (план)",
+            "Включён (высота)",
+            "Имя",
+            f"Восток исх. ({src_name})",
+            f"Север исх. ({src_name})",
+            f"Высота исх. ({src_name})",
+            f"Восток опорн. ({tgt_name})",
+            f"Север опорн. ({tgt_name})",
+            f"Высота опорн. ({tgt_name})",
+        ])
+
+        rows = [header]
+        for d in data:
+            row = sep.join([
+                "1" if d.get("enabled_plan") else "0",
+                "1" if d.get("enabled_h")    else "0",
+                str(d.get("name", "")),
+                str(d.get("x1",   "")),
+                str(d.get("y1",   "")),
+                str(d.get("h1",   "")),
+                str(d.get("x2",   "")),
+                str(d.get("y2",   "")),
+                str(d.get("h2",   "")),
+            ])
+            rows.append(row)
+
+        try:
+            with open(path, "w", encoding="utf-8-sig", newline="\n") as f:
+                # utf-8-sig добавляет BOM — Excel открывает без вопросов
+                f.write("\n".join(rows))
+        except IOError as e:
+            wx.MessageBox(str(e), "Ошибка записи", wx.OK | wx.ICON_ERROR)
 
     # ── View update ───────────────────────────────────────────────────────────
 
@@ -413,7 +475,7 @@ class MainFrame(BaseMainFrame):
         dlg.Destroy()
 
         if result == wx.ID_YES:
-            self.on_save_result(None)
+            self._save_table_to_file(None)
             return True
         if result == wx.ID_NO:
             return True
@@ -438,7 +500,8 @@ class MainFrame(BaseMainFrame):
         self.point_pairs  = []
         self.calc_result  = None
         self.is_modified  = False
-        self.result_crs = None
+        self._last_all_residuals = []
+        self._last_all_metric    = []
 
         # Очищаем панель результатов
         self._set_result_text("")
@@ -606,3 +669,149 @@ class MainFrame(BaseMainFrame):
                 self.target_crs = dlg.get_selected_crs()
                 self._target_crs_label  = dlg.get_selected_name()
                 self.m_lbl_tgt_crs.SetLabel(dlg.get_selected_name())
+    
+    def _get_threshold_m(self) -> float:
+        """
+        Возвращает порог подсветки в метрах.
+        «метров» → значение спинера напрямую.
+        «СКО»    → значение спинера × СКО_ENU из последнего результата.
+        """
+        value = self.m_spin_bad_threshold.GetValue()
+        if self.m_choice_bad_units.GetSelection() == 1:
+            # абсолютные метры
+            return value
+        else:
+            # кратно СКО
+            rms = self._rms_from_grid()
+            if rms and rms > 0:
+                return value * rms
+            # СКО ещё не посчитано — fallback на абсолютное значение
+            return value
+
+    def _on_threshold_changed(self, event):
+        if self.calc_result is None:
+            event.Skip()
+            return
+        threshold = self._get_threshold_m()
+        # Перекрашиваем невязки с новым порогом без пересчёта
+        if hasattr(self, '_last_all_residuals'):
+            self.coord_grid.update_residuals(
+                self._last_all_residuals, threshold=threshold
+            )
+        if hasattr(self, '_last_all_metric'):
+            self.coord_grid.update_metric_residuals(
+                self._last_all_metric, threshold=threshold
+            )
+        event.Skip()
+
+    def _bind_statusbar_hint(self, ctrl: wx.Window, text: str):
+        """
+        Показывает подсказку в статусбаре при наведении мыши на контрол.
+        Восстанавливает пустую строку при уходе курсора.
+        """
+        ctrl.Bind(wx.EVT_ENTER_WINDOW,
+                lambda e, t=text: (self.m_statusBar1.SetStatusText(t), e.Skip()))
+        ctrl.Bind(wx.EVT_LEAVE_WINDOW,
+                lambda e: (self.m_statusBar1.SetStatusText(""), e.Skip()))
+    
+    def _bind_hints(self):
+        self._bind_statusbar_hint(
+            self.m_btn_calc,
+            "Вычислить 7 параметров преобразования Гельмерта по введённым точкам"
+        )
+        self._bind_statusbar_hint(
+            self.m_btn_set_src_crs,
+            "Выбрать исходную систему координат из базы или задать вручную (WKT/Proj4)"
+        )
+        self._bind_statusbar_hint(
+            self.m_btn_set_tgt_crs,
+            "Выбрать целевую систему координат (по умолчанию WGS 84)"
+        )
+        self._bind_statusbar_hint(
+            self.m_spin_bad_threshold,
+            "Порог подсветки красным — невязки выше этого значения отмечаются как грубые"
+        )
+        self._bind_statusbar_hint(
+            self.m_choice_bad_units,
+            "Единицы порога: в метрах или кратно СКО по контрольным невязкам dE/dN/dU"
+        )
+        self._bind_statusbar_hint(
+            self.m_rb_method,
+            "EPSG:1033 Position Vector и EPSG:1032 Coordinate Frame — "
+            "одни и те же параметры с инвертированными знаками вращения"
+        )
+        self._bind_statusbar_hint(
+            self.m_rb_direction,
+            "Направление параметров: прямое (исходная→целевая) или обратное"
+        )
+
+    def _format_crs(self, fmt: str) -> Optional[str]:
+        if self.calc_result is None or self.source_crs is None:
+            wx.MessageBox("Сначала выполните расчёт.",
+                        "Нет результата", wx.OK | wx.ICON_INFORMATION)
+            return None
+
+        display_name = getattr(self, '_source_crs_label', '') or ''
+
+        from utils.crs_export import to_wkt1, to_wkt2, to_proj4
+        try:
+            if fmt == "wkt1":
+                return to_wkt1(self.source_crs, self.calc_result.params, display_name)
+            elif fmt == "wkt2":
+                return to_wkt2(self.source_crs, self.calc_result.params, display_name)
+            elif fmt == "proj4":
+                return to_proj4(self.source_crs, self.calc_result.params)
+        except Exception as e:
+            wx.MessageBox(f"Не удалось сформировать {fmt.upper()}:\n{e}",
+                        "Ошибка", wx.OK | wx.ICON_ERROR)
+        return None
+
+
+    def _save_crs_to_file(self, fmt: str):
+        text = self._format_crs(fmt)
+        if text is None:
+            return
+
+        if fmt in ("wkt1", "wkt2"):
+            wildcard = (
+                "PRJ файл (*.prj)|*.prj"
+                "|WKT файл (*.wkt)|*.wkt"
+                "|Текстовый файл (*.txt)|*.txt"
+                "|Все файлы (*.*)|*.*"
+            )
+        else:
+            wildcard = (
+                "PRJ файл (*.prj)|*.prj"
+                "|Текстовый файл (*.txt)|*.txt"
+                "|Все файлы (*.*)|*.*"
+            )
+
+        with wx.FileDialog(
+            self, f"Сохранить {fmt.upper()}",
+            wildcard=wildcard,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+        ) as dlg:
+            dlg.SetFilename(f"result.prj")
+            if dlg.ShowModal() == wx.ID_CANCEL:
+                return
+            path = dlg.GetPath()
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+        except IOError as e:
+            wx.MessageBox(str(e), "Ошибка записи", wx.OK | wx.ICON_ERROR)
+
+
+    def _copy_crs_to_clipboard(self, fmt: str):
+        text = self._format_crs(fmt)
+        if text is None:
+            return
+        if wx.TheClipboard.Open():
+            try:
+                wx.TheClipboard.SetData(wx.TextDataObject(text))
+                wx.MessageBox(f"Описание проекции в формате {fmt} скопировано в буфер обмена",
+                        "Копирование успешно", wx.OK | wx.ICON_ASTERISK)
+            finally:
+                wx.TheClipboard.Close()
+            
