@@ -11,4 +11,5 @@ wheels/
 env/
 
 tests/
-resources/us_nga_egm2008_1.tif
+resources/egm08_25.gtx
+resources/combined_crs.db
