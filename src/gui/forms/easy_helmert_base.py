@@ -18,7 +18,7 @@ import wx.dataview
 class BaseMainFrame ( wx.Frame ):
 
     def __init__( self, parent ):
-        wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Easy Helmert", pos = wx.DefaultPosition, size = wx.Size( 1034,738 ), style = wx.DEFAULT_FRAME_STYLE|wx.RESIZE_BORDER|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
+        wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Easy Helmert", pos = wx.DefaultPosition, size = wx.Size( 1000,800 ), style = wx.DEFAULT_FRAME_STYLE|wx.RESIZE_BORDER|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
 
         self.SetSizeHints( wx.Size( -1,600 ), wx.DefaultSize )
         self.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_HIGHLIGHTTEXT ) )
@@ -118,7 +118,7 @@ class BaseMainFrame ( wx.Frame ):
         bSizer2 = wx.BoxSizer( wx.VERTICAL )
 
         self.m_splitter = wx.SplitterWindow( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.SP_3D|wx.SP_LIVE_UPDATE )
-        self.m_splitter.SetSashGravity( 0.65 )
+        self.m_splitter.SetSashGravity( 0.7 )
         self.m_splitter.Bind( wx.EVT_IDLE, self.m_splitterOnIdle )
         self.m_splitter.SetMinimumPaneSize( 150 )
 
@@ -173,15 +173,21 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerGrid = wx.BoxSizer( wx.HORIZONTAL )
 
+        self.m_splitter2 = wx.SplitterWindow( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.SP_3D )
+        self.m_splitter2.SetSashGravity( 0.1 )
+        self.m_splitter2.Bind( wx.EVT_IDLE, self.m_splitter2OnIdle )
+        self.m_splitter2.SetMinimumPaneSize( 200 )
+
+        self.m_scrolledWindow_settings = wx.ScrolledWindow( self.m_splitter2, wx.ID_ANY, wx.DefaultPosition, wx.Size( -1,-1 ), wx.BORDER_NONE|wx.HSCROLL|wx.VSCROLL )
+        self.m_scrolledWindow_settings.SetScrollRate( 5, 5 )
         bSizerGridSettings = wx.BoxSizer( wx.VERTICAL )
 
-        bSizerGridSettings.SetMinSize( wx.Size( 250,250 ) )
-        self.m_staticText151 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Настройки входных данных", wx.DefaultPosition, wx.Size( 320,-1 ), 0 )
+        self.m_staticText151 = wx.StaticText( self.m_scrolledWindow_settings, wx.ID_ANY, u"Настройки входных данных", wx.DefaultPosition, wx.Size( -1,-1 ), 0 )
         self.m_staticText151.Wrap( -1 )
 
         bSizerGridSettings.Add( self.m_staticText151, 0, wx.ALL, 5 )
 
-        sbSizer3 = wx.StaticBoxSizer( wx.StaticBox( self.m_panel_input, wx.ID_ANY, u"Подгоняемая система координат" ), wx.HORIZONTAL )
+        sbSizer3 = wx.StaticBoxSizer( wx.StaticBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Подгоняемая система координат" ), wx.HORIZONTAL )
 
         self.m_lbl_src_crs = wx.StaticText( sbSizer3.GetStaticBox(), wx.ID_ANY, u"Не выбрана", wx.DefaultPosition, wx.Size( 250,-1 ), wx.ST_ELLIPSIZE_MIDDLE )
         self.m_lbl_src_crs.Wrap( -1 )
@@ -198,7 +204,7 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerGridSettings.Add( sbSizer3, 0, wx.EXPAND|wx.LEFT|wx.RIGHT, 5 )
 
-        sbSizer31 = wx.StaticBoxSizer( wx.StaticBox( self.m_panel_input, wx.ID_ANY, u"Опорная система координат" ), wx.HORIZONTAL )
+        sbSizer31 = wx.StaticBoxSizer( wx.StaticBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Опорная система координат" ), wx.HORIZONTAL )
 
         self.m_lbl_tgt_crs = wx.StaticText( sbSizer31.GetStaticBox(), wx.ID_ANY, u"Не выбрана", wx.DefaultPosition, wx.Size( 250,-1 ), wx.ST_ELLIPSIZE_MIDDLE )
         self.m_lbl_tgt_crs.Wrap( -1 )
@@ -217,38 +223,56 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizer27 = wx.BoxSizer( wx.HORIZONTAL )
 
-        self.m_staticText21 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Подсв. красным невязки >", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText21 = wx.StaticText( self.m_scrolledWindow_settings, wx.ID_ANY, u"Подсв. красным невязки >", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.m_staticText21.Wrap( -1 )
 
         bSizer27.Add( self.m_staticText21, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
 
-        self.m_spin_bad_threshold = wx.SpinCtrlDouble( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 0, 100, 0.1, 1 )
+        self.m_spin_bad_threshold = wx.SpinCtrlDouble( self.m_scrolledWindow_settings, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS, 0, 100, 0.1, 1 )
         self.m_spin_bad_threshold.SetDigits( 2 )
         bSizer27.Add( self.m_spin_bad_threshold, 0, wx.ALL, 5 )
 
         m_choice_bad_unitsChoices = [ u"СКО", u"метров" ]
-        self.m_choice_bad_units = wx.Choice( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_bad_unitsChoices, 0 )
+        self.m_choice_bad_units = wx.Choice( self.m_scrolledWindow_settings, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_bad_unitsChoices, 0 )
         self.m_choice_bad_units.SetSelection( 1 )
         bSizer27.Add( self.m_choice_bad_units, 1, wx.ALL, 5 )
 
 
         bSizerGridSettings.Add( bSizer27, 0, wx.EXPAND, 5 )
 
+        bSizer45 = wx.BoxSizer( wx.HORIZONTAL )
+
+        m_rb_src_actionChoices = [ u"Прибавить высоту EGM2008", u"Вычесть высоту EGM2008", u"Ничего не делать" ]
+        self.m_rb_src_action = wx.RadioBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Для точек в исходной СК:", wx.DefaultPosition, wx.DefaultSize, m_rb_src_actionChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_src_action.SetSelection( 2 )
+        bSizer45.Add( self.m_rb_src_action, 1, wx.ALL, 5 )
+
+        m_rb_tgt_actionChoices = [ u"Прибавить высоту EGM2008", u"Вычесть высоту EGM2008", u"Ничего не делать" ]
+        self.m_rb_tgt_action = wx.RadioBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Для точек в опорной СК:", wx.DefaultPosition, wx.DefaultSize, m_rb_tgt_actionChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_tgt_action.SetSelection( 2 )
+        bSizer45.Add( self.m_rb_tgt_action, 1, wx.ALL, 5 )
+
+
+        bSizerGridSettings.Add( bSizer45, 0, wx.EXPAND, 5 )
+
+        self.m_chk_correction = wx.CheckBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Применить поправку среднего расхождения высот", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizerGridSettings.Add( self.m_chk_correction, 0, wx.ALL, 5 )
+
 
         bSizerGridSettings.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
-        self.m_btn_calc = wx.Button( self.m_panel_input, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.Size( 150,-1 ), wx.BU_EXACTFIT )
+        self.m_btn_calc = wx.Button( self.m_scrolledWindow_settings, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.Size( -1,-1 ), wx.BU_EXACTFIT )
 
         self.m_btn_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
-        self.m_btn_calc.SetMinSize( wx.Size( 150,-1 ) )
-
         bSizerGridSettings.Add( self.m_btn_calc, 0, wx.ALL|wx.FIXED_MINSIZE|wx.EXPAND, 5 )
 
 
-        bSizerGrid.Add( bSizerGridSettings, 0, wx.EXPAND, 5 )
-
-        self.m_grid_placeholder = wx.Panel( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
-        bSizerGrid.Add( self.m_grid_placeholder, 1, wx.EXPAND |wx.ALL, 2 )
+        self.m_scrolledWindow_settings.SetSizer( bSizerGridSettings )
+        self.m_scrolledWindow_settings.Layout()
+        bSizerGridSettings.Fit( self.m_scrolledWindow_settings )
+        self.m_grid_placeholder = wx.Panel( self.m_splitter2, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        self.m_splitter2.SplitVertically( self.m_scrolledWindow_settings, self.m_grid_placeholder, 400 )
+        bSizerGrid.Add( self.m_splitter2, 1, wx.EXPAND, 5 )
 
 
         bSizerInput.Add( bSizerGrid, 1, wx.EXPAND, 5 )
@@ -274,36 +298,45 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizer15 = wx.BoxSizer( wx.HORIZONTAL )
 
+        self.m_splitter3 = wx.SplitterWindow( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.SP_3D )
+        self.m_splitter3.SetSashGravity( 0.1 )
+        self.m_splitter3.Bind( wx.EVT_IDLE, self.m_splitter3OnIdle )
+        self.m_splitter3.SetMinimumPaneSize( 1 )
+
+        self.m_panel9 = wx.Panel( self.m_splitter3, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        bSizer28 = wx.BoxSizer( wx.VERTICAL )
+
+        self.m_scrolledWindow2 = wx.ScrolledWindow( self.m_panel9, wx.ID_ANY, wx.DefaultPosition, wx.Size( -1,-1 ), wx.HSCROLL|wx.VSCROLL )
+        self.m_scrolledWindow2.SetScrollRate( 5, 5 )
         bSizer17 = wx.BoxSizer( wx.VERTICAL )
 
-        bSizer17.SetMinSize( wx.Size( 250,250 ) )
-        self.m_staticText15 = wx.StaticText( self.m_panel_result, wx.ID_ANY, u"Настройки вывода параметров", wx.DefaultPosition, wx.Size( 320,-1 ), 0 )
+        self.m_staticText15 = wx.StaticText( self.m_scrolledWindow2, wx.ID_ANY, u"Настройки вывода параметров", wx.DefaultPosition, wx.Size( -1,-1 ), 0 )
         self.m_staticText15.Wrap( -1 )
 
         bSizer17.Add( self.m_staticText15, 0, wx.ALL, 5 )
 
         m_rb_methodChoices = [ u"EPSG:1033 (9606) Position Vector Transformation", u"EPSG:1032 (9607) Coordinate Frame Rotation" ]
-        self.m_rb_method = wx.RadioBox( self.m_panel_result, wx.ID_ANY, u"Метод преобразования", wx.DefaultPosition, wx.DefaultSize, m_rb_methodChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_method = wx.RadioBox( self.m_scrolledWindow2, wx.ID_ANY, u"Метод преобразования", wx.DefaultPosition, wx.DefaultSize, m_rb_methodChoices, 1, wx.RA_SPECIFY_COLS )
         self.m_rb_method.SetSelection( 0 )
         self.m_rb_method.SetToolTip( u"EPSG:1033 (9606) Position Vector Transformation - дефолтный для WKT- и Proj4-описаний.\nEPSG:1032 (9607) Coordinate Frame Rotation - метод, описанный в ГОСТ 32453-2017\n\nЧтобы понять, какой метод используется в вашей программе, посмотрите в ней на дефолтные 7 параметров для МСК:\nа) Если в них число 23.57 противоположно по знаку всем другим числам, то это 1032 (9607) Coordinate Frame Rotation\nб) Если в них число 23.57 по знаку совпадает с параметрами разворота (0.35 и 0.79), то это 1033 (9606) Position Vector Transformation" )
 
         bSizer17.Add( self.m_rb_method, 0, wx.ALL|wx.EXPAND, 5 )
 
         m_rb_directionChoices = [ u"Из исходной -> в опорную", u"Из опорной -> в исходную" ]
-        self.m_rb_direction = wx.RadioBox( self.m_panel_result, wx.ID_ANY, u"Направление параметров", wx.DefaultPosition, wx.DefaultSize, m_rb_directionChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_direction = wx.RadioBox( self.m_scrolledWindow2, wx.ID_ANY, u"Направление параметров", wx.DefaultPosition, wx.DefaultSize, m_rb_directionChoices, 1, wx.RA_SPECIFY_COLS )
         self.m_rb_direction.SetSelection( 0 )
         bSizer17.Add( self.m_rb_direction, 0, wx.ALL|wx.EXPAND, 5 )
 
         bSizer18 = wx.BoxSizer( wx.HORIZONTAL )
 
         bSizer18.SetMinSize( wx.Size( -1,30 ) )
-        self.m_staticText12 = wx.StaticText( self.m_panel_result, wx.ID_ANY, u"Единицы поворота", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText12 = wx.StaticText( self.m_scrolledWindow2, wx.ID_ANY, u"Единицы поворота", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.m_staticText12.Wrap( -1 )
 
         bSizer18.Add( self.m_staticText12, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
 
         m_choice_rotation_unitsChoices = [ u"Секунды (″)", u"Радианы" ]
-        self.m_choice_rotation_units = wx.Choice( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_rotation_unitsChoices, 0 )
+        self.m_choice_rotation_units = wx.Choice( self.m_scrolledWindow2, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_rotation_unitsChoices, 0 )
         self.m_choice_rotation_units.SetSelection( 0 )
         bSizer18.Add( self.m_choice_rotation_units, 1, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
 
@@ -313,13 +346,13 @@ class BaseMainFrame ( wx.Frame ):
         bSizer181 = wx.BoxSizer( wx.HORIZONTAL )
 
         bSizer181.SetMinSize( wx.Size( -1,30 ) )
-        self.m_staticText121 = wx.StaticText( self.m_panel_result, wx.ID_ANY, u"Единицы масштаба", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText121 = wx.StaticText( self.m_scrolledWindow2, wx.ID_ANY, u"Единицы масштаба", wx.DefaultPosition, wx.DefaultSize, 0 )
         self.m_staticText121.Wrap( -1 )
 
         bSizer181.Add( self.m_staticText121, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
 
         m_choice_scale_unitsChoices = [ u"Безразмерный коэффициент", u"Миллионные части (ppm)", u"Миллиардные части (ppb)" ]
-        self.m_choice_scale_units = wx.Choice( self.m_panel_result, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_scale_unitsChoices, 0 )
+        self.m_choice_scale_units = wx.Choice( self.m_scrolledWindow2, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_scale_unitsChoices, 0 )
         self.m_choice_scale_units.SetSelection( 1 )
         bSizer181.Add( self.m_choice_scale_units, 1, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
 
@@ -327,13 +360,31 @@ class BaseMainFrame ( wx.Frame ):
         bSizer17.Add( bSizer181, 0, wx.EXPAND, 5 )
 
 
-        bSizer15.Add( bSizer17, 0, wx.EXPAND, 5 )
+        self.m_scrolledWindow2.SetSizer( bSizer17 )
+        self.m_scrolledWindow2.Layout()
+        bSizer17.Fit( self.m_scrolledWindow2 )
+        bSizer28.Add( self.m_scrolledWindow2, 1, wx.EXPAND |wx.ALL, 5 )
 
-        self.m_txt_result = wx.TextCtrl( self.m_panel_result, wx.ID_ANY, u"Результат расчёта...", wx.DefaultPosition, wx.DefaultSize, wx.HSCROLL|wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_RICH2|wx.BORDER_THEME )
+
+        self.m_panel9.SetSizer( bSizer28 )
+        self.m_panel9.Layout()
+        bSizer28.Fit( self.m_panel9 )
+        self.m_panel10 = wx.Panel( self.m_splitter3, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        bSizer29 = wx.BoxSizer( wx.VERTICAL )
+
+        self.m_txt_result = wx.TextCtrl( self.m_panel10, wx.ID_ANY, u"Результат расчёта...", wx.DefaultPosition, wx.DefaultSize, wx.HSCROLL|wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_RICH2|wx.BORDER_THEME )
         self.m_txt_result.SetFont( wx.Font( 10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
         self.m_txt_result.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_INACTIVEBORDER ) )
+        self.m_txt_result.SetMaxSize( wx.Size( -1,250 ) )
 
-        bSizer15.Add( self.m_txt_result, 1, wx.ALL|wx.EXPAND, 5 )
+        bSizer29.Add( self.m_txt_result, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+        self.m_panel10.SetSizer( bSizer29 )
+        self.m_panel10.Layout()
+        bSizer29.Fit( self.m_panel10 )
+        self.m_splitter3.SplitVertically( self.m_panel9, self.m_panel10, 400 )
+        bSizer15.Add( self.m_splitter3, 1, wx.EXPAND, 5 )
 
 
         bSizerResult.Add( bSizer15, 1, wx.EXPAND, 5 )
@@ -342,7 +393,7 @@ class BaseMainFrame ( wx.Frame ):
         self.m_panel_result.SetSizer( bSizerResult )
         self.m_panel_result.Layout()
         bSizerResult.Fit( self.m_panel_result )
-        self.m_splitter.SplitHorizontally( self.m_panel_input, self.m_panel_result, 0 )
+        self.m_splitter.SplitHorizontally( self.m_panel_input, self.m_panel_result, 370 )
         bSizer2.Add( self.m_splitter, 1, wx.ALL|wx.EXPAND, 5 )
 
 
@@ -363,8 +414,16 @@ class BaseMainFrame ( wx.Frame ):
         event.Skip()
 
     def m_splitterOnIdle( self, event ):
-        self.m_splitter.SetSashPosition( 0 )
+        self.m_splitter.SetSashPosition( 370 )
         self.m_splitter.Unbind( wx.EVT_IDLE )
+
+    def m_splitter2OnIdle( self, event ):
+        self.m_splitter2.SetSashPosition( 400 )
+        self.m_splitter2.Unbind( wx.EVT_IDLE )
+
+    def m_splitter3OnIdle( self, event ):
+        self.m_splitter3.SetSashPosition( 400 )
+        self.m_splitter3.Unbind( wx.EVT_IDLE )
 
     # Virtual image path resolution method. Override this in your derived class.
     def get_resource_path( self, bitmap_path ):
@@ -473,6 +532,135 @@ class BaseCRSPickerDialog ( wx.Dialog ):
 
         self.SetSizer( m_root_sizer )
         self.Layout()
+
+        self.Centre( wx.BOTH )
+
+    def __del__( self ):
+        pass
+
+    # Virtual image path resolution method. Override this in your derived class.
+    def get_resource_path( self, bitmap_path ):
+        return bitmap_path
+
+
+###########################################################################
+## Class BaseHeightsCalcDialog
+###########################################################################
+
+class BaseHeightsCalcDialog ( wx.Dialog ):
+
+    def __init__( self, parent ):
+        wx.Dialog.__init__ ( self, parent, id = wx.ID_ANY, title = u"Преобразование высот относительно геоида EGM-2008...", pos = wx.DefaultPosition, size = wx.DefaultSize, style = wx.DEFAULT_DIALOG_STYLE )
+
+        self.SetSizeHints( wx.Size( 640,480 ), wx.DefaultSize )
+
+        bSizer28 = wx.BoxSizer( wx.VERTICAL )
+
+        self.m_panel_settings = wx.Panel( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        bSizer40 = wx.BoxSizer( wx.VERTICAL )
+
+        bSizer37 = wx.BoxSizer( wx.HORIZONTAL )
+
+        bSizer29 = wx.BoxSizer( wx.HORIZONTAL )
+
+        self.m_staticText22 = wx.StaticText( self.m_panel_settings, wx.ID_ANY, u"Исходная СК:", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText22.Wrap( -1 )
+
+        bSizer29.Add( self.m_staticText22, 0, wx.ALL, 5 )
+
+        self.m_lbl_crs = wx.StaticText( self.m_panel_settings, wx.ID_ANY, u"Не задано...", wx.DefaultPosition, wx.DefaultSize, wx.ST_ELLIPSIZE_MIDDLE )
+        self.m_lbl_crs.Wrap( -1 )
+
+        self.m_lbl_crs.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
+
+        bSizer29.Add( self.m_lbl_crs, 1, wx.ALL, 5 )
+
+
+        bSizer37.Add( bSizer29, 1, wx.EXPAND, 5 )
+
+        bSizer291 = wx.BoxSizer( wx.HORIZONTAL )
+
+        self.m_staticText221 = wx.StaticText( self.m_panel_settings, wx.ID_ANY, u"Опорная СК:", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText221.Wrap( -1 )
+
+        bSizer291.Add( self.m_staticText221, 0, wx.ALL, 5 )
+
+        self.m_lbl_crs1 = wx.StaticText( self.m_panel_settings, wx.ID_ANY, u"Не задано...", wx.DefaultPosition, wx.DefaultSize, wx.ST_ELLIPSIZE_MIDDLE )
+        self.m_lbl_crs1.Wrap( -1 )
+
+        self.m_lbl_crs1.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
+
+        bSizer291.Add( self.m_lbl_crs1, 1, wx.ALL, 5 )
+
+
+        bSizer37.Add( bSizer291, 1, wx.EXPAND, 5 )
+
+
+        bSizer40.Add( bSizer37, 0, wx.EXPAND, 5 )
+
+        bSizer45 = wx.BoxSizer( wx.HORIZONTAL )
+
+        m_rb_src_actionChoices = [ u"Прибавить высоту геоида", u"Вычесть высоту геоида", u"Ничего не делать" ]
+        self.m_rb_src_action = wx.RadioBox( self.m_panel_settings, wx.ID_ANY, u"Для точек в исходной СК:", wx.DefaultPosition, wx.DefaultSize, m_rb_src_actionChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_src_action.SetSelection( 0 )
+        bSizer45.Add( self.m_rb_src_action, 1, wx.ALL|wx.EXPAND, 5 )
+
+        m_rb_tgt_actionChoices = [ u"Прибавить высоту геоида", u"Вычесть высоту геоида", u"Ничего не делать" ]
+        self.m_rb_tgt_action = wx.RadioBox( self.m_panel_settings, wx.ID_ANY, u"Для точек в опорной СК:", wx.DefaultPosition, wx.DefaultSize, m_rb_tgt_actionChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_tgt_action.SetSelection( 2 )
+        bSizer45.Add( self.m_rb_tgt_action, 1, wx.ALL, 5 )
+
+
+        bSizer40.Add( bSizer45, 1, wx.EXPAND, 5 )
+
+        self.m_chk_correction = wx.CheckBox( self.m_panel_settings, wx.ID_ANY, u"Применить поправку среднего расхождения", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer40.Add( self.m_chk_correction, 0, wx.ALL, 5 )
+
+
+        self.m_panel_settings.SetSizer( bSizer40 )
+        self.m_panel_settings.Layout()
+        bSizer40.Fit( self.m_panel_settings )
+        bSizer28.Add( self.m_panel_settings, 0, wx.EXPAND |wx.ALL, 5 )
+
+        self.m_panel_preview = wx.Panel( self, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        bSizer42 = wx.BoxSizer( wx.VERTICAL )
+
+        self.m_grid_preview_placeholder = wx.Panel( self.m_panel_preview, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.TAB_TRAVERSAL )
+        self.m_grid_preview_placeholder.SetMinSize( wx.Size( 600,280 ) )
+
+        bSizer42.Add( self.m_grid_preview_placeholder, 1, wx.EXPAND |wx.ALL, 5 )
+
+        self.m_lbl_avg_diff = wx.StaticText( self.m_panel_preview, wx.ID_ANY, u"Среднее расхождение = 0.0", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_lbl_avg_diff.Wrap( -1 )
+
+        self.m_lbl_avg_diff.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_ITALIC, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
+
+        bSizer42.Add( self.m_lbl_avg_diff, 0, wx.ALL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN, 5 )
+
+
+        self.m_panel_preview.SetSizer( bSizer42 )
+        self.m_panel_preview.Layout()
+        bSizer42.Fit( self.m_panel_preview )
+        bSizer28.Add( self.m_panel_preview, 1, wx.EXPAND |wx.ALL, 5 )
+
+        bSizer44 = wx.BoxSizer( wx.HORIZONTAL )
+
+
+        bSizer44.Add( ( 0, 0), 1, wx.EXPAND, 5 )
+
+        self.m_btn_apply = wx.Button( self, wx.ID_ANY, u"Применить", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer44.Add( self.m_btn_apply, 0, wx.ALL, 5 )
+
+        self.m_btn_cancel = wx.Button( self, wx.ID_CANCEL, u"Отмена", wx.DefaultPosition, wx.DefaultSize, 0 )
+        bSizer44.Add( self.m_btn_cancel, 0, wx.ALL, 5 )
+
+
+        bSizer28.Add( bSizer44, 0, wx.EXPAND, 5 )
+
+
+        self.SetSizer( bSizer28 )
+        self.Layout()
+        bSizer28.Fit( self )
 
         self.Centre( wx.BOTH )
 

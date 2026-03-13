@@ -64,6 +64,7 @@ class MainFrame(BaseMainFrame):
         self.source_crs = None
         self.target_crs = CRS.from_epsg(4979)
         self.m_lbl_tgt_crs.SetLabel("WGS 84 [EPSG:4979]")
+        wx.CallAfter(self._update_geoid_controls)
 
     def _setup_layout(self):
         self.Layout()
@@ -149,6 +150,10 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_TOOL, lambda e: self._copy_crs_to_clipboard("proj4"), self.m_tool_copy_proj4)
         self.Bind(wx.EVT_TOOL, self._save_table_to_file, self.m_tool_save_table)
         self.Bind(wx.EVT_TOOL, self.on_export_calibration, self.m_tool_export_calibration)
+        self.m_rb_src_action.Bind(
+            wx.EVT_RADIOBOX,
+            lambda e: (self._update_geoid_controls(), e.Skip()),
+        )
 
     def _on_update_export_ui(self, event):
         event.Enable(self.calc_result is not None)
@@ -262,8 +267,43 @@ class MainFrame(BaseMainFrame):
             return
 
         from core.transformation import calculate_helmert
+        from core.geoid_correction import (
+            calculate_helmert_with_geoid, geoid_needed,
+        )
+        src_action, tgt_action = self._read_geoid_actions()
+        apply_correction = (
+            self.m_chk_correction.IsEnabled()
+            and self.m_chk_correction.GetValue()
+        )
         try:
-            result = calculate_helmert(pairs, self.source_crs, self.target_crs)
+            if geoid_needed(src_action, tgt_action):
+                result, geoid_info = calculate_helmert_with_geoid(
+                    pairs, self.source_crs, self.target_crs,
+                    src_action, tgt_action,
+                    apply_correction=apply_correction,
+                )
+                all_geoid_src = [None] * len(raw)
+                all_geoid_tgt = [None] * len(raw)
+                j = 0
+                for i, r in enumerate(raw):
+                    if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
+                        all_geoid_src[i] = geoid_info.src[j]
+                        all_geoid_tgt[i] = geoid_info.tgt[j]
+                        j += 1
+                self.coord_grid.update_geoid_heights(all_geoid_src, all_geoid_tgt)
+                self._last_delta_zeta_mean = geoid_info.delta_zeta_mean
+            else:
+                result = calculate_helmert(pairs, self.source_crs, self.target_crs)
+                self.coord_grid.clear_geoid_heights()
+                self._last_delta_zeta_mean = None
+        except FileNotFoundError as e:
+            wx.MessageBox(
+                f"Файл геоида не найден:\n{e}\n\n"
+                "Убедитесь, что egm08_25.gtx или us_nga_egm2008_1.tif "
+                "присутствует в папке resources/",
+                "Геоид не найден", wx.OK | wx.ICON_ERROR,
+            )
+            return
         except Exception as e:
             wx.MessageBox(f"Ошибка расчёта:\n{e}", "Ошибка", wx.OK | wx.ICON_ERROR)
             return
@@ -310,6 +350,59 @@ class MainFrame(BaseMainFrame):
             rms_metric_m  = self._rms_from_grid(),
         )
 
+    def _update_geoid_controls(self):
+        """
+        Включает/отключает контролы геоида.
+
+        Основные радиобоксы + кнопка высот: активны если хотя бы одна СК
+        связана с WGS-84.
+
+        Чекбокс поправки Балтика→EGM: только когда
+        • target_crs связана с WGS-84  (высоты опорных точек — в WGS)
+        • src_action == ADD             (к исходным точкам прибавляем EGM)
+        Если условия не выполнены — чекбокс сбрасывается и блокируется.
+        """
+        from core.geoid_correction import (
+            GeoidAction, geoid_controls_active, crs_is_wgs84_related,
+        )
+        src_crs = getattr(self, "source_crs", None)
+        tgt_crs = getattr(self, "target_crs", None)
+
+        active = geoid_controls_active(src_crs, tgt_crs)
+        for ctrl in (
+            self.m_rb_src_action,
+            self.m_rb_tgt_action,
+        ):
+            ctrl.Enable(active)
+
+        # Чекбокс поправки
+        correction_ok = (
+            active
+            and tgt_crs is not None
+            and crs_is_wgs84_related(tgt_crs)
+            and self.m_rb_src_action.GetSelection() == int(GeoidAction.ADD)
+        )
+        self.m_chk_correction.Enable(correction_ok)
+        if not correction_ok:
+            self.m_chk_correction.SetValue(False)
+
+    def _read_geoid_actions(self):
+        """
+        Читает настройки геоида из UI.
+        Возвращает (src_action, tgt_action) — оба GeoidAction.
+        Если контролы неактивны — принудительно NOTHING для обоих.
+        """
+        from core.geoid_correction import GeoidAction, geoid_controls_active
+        if not geoid_controls_active(
+            getattr(self, "source_crs", None),
+            getattr(self, "target_crs", None),
+        ):
+            return GeoidAction.NOTHING, GeoidAction.NOTHING
+        return (
+            GeoidAction(self.m_rb_src_action.GetSelection()),
+            GeoidAction(self.m_rb_tgt_action.GetSelection()),
+        )
+
     def _rms_from_grid(self) -> Optional[float]:
         """СКО по ENU-невязкам из последнего результата расчёта."""
         import numpy as np
@@ -325,7 +418,17 @@ class MainFrame(BaseMainFrame):
 
     def update_results(self, result: CalculationResult):
         display = result.params.as_display(self._read_display_settings())
-        self._set_result_text(display.to_text())
+        text    = display.to_text()
+
+        dz = getattr(self, "_last_delta_zeta_mean", None)
+        if dz is not None:
+            text += (
+                f"\n\n"
+                f"  Δζ (Балтика − EGM2008) = {dz:+.4f} м  "
+                f"({dz * 100:+.2f} см)"
+            )
+
+        self._set_result_text(text)
         self.is_modified = False
 
     def _src_crs_name(self) -> str:
@@ -432,7 +535,8 @@ class MainFrame(BaseMainFrame):
             "Импорт калибровки...": "import_icon",
             "Копировать WKT1": "copy_wkt1_icon",
             "Копировать WKT2": "copy_wkt2_icon",
-            "Копировать Proj4": "copy_proj4_icon"
+            "Копировать Proj4": "copy_proj4_icon",
+            "Пересчитать высоты относительно геоида": "calculate_heights_icon"
         }
         for pos in range(self.m_toolbar.GetToolsCount()):
             tool = self.m_toolbar.GetToolByPos(pos)
@@ -518,6 +622,7 @@ class MainFrame(BaseMainFrame):
         self.is_modified  = False
         self._last_all_residuals = []
         self._last_all_metric    = []
+        self._last_delta_zeta_mean = None
 
         # Очищаем панель результатов
         self._set_result_text("")
@@ -677,6 +782,7 @@ class MainFrame(BaseMainFrame):
                 self.source_crs = dlg.get_selected_crs()
                 self._source_crs_label  = dlg.get_selected_name()
                 self.m_lbl_src_crs.SetLabel(dlg.get_selected_name())
+                self._update_geoid_controls()
 
     def on_select_target_crs(self, event):
         from gui.dialogs.crs_picker_dialog import CrsPickerDialog
@@ -685,6 +791,7 @@ class MainFrame(BaseMainFrame):
                 self.target_crs = dlg.get_selected_crs()
                 self._target_crs_label  = dlg.get_selected_name()
                 self.m_lbl_tgt_crs.SetLabel(dlg.get_selected_name())
+                self._update_geoid_controls()
     
     def _get_threshold_m(self) -> float:
         """
@@ -759,6 +866,16 @@ class MainFrame(BaseMainFrame):
         self._bind_statusbar_hint(
             self.m_rb_direction,
             "Направление параметров: прямое (исходная→целевая) или обратное"
+        )
+
+        self._bind_statusbar_hint(
+            self.m_rb_src_action,
+            "Если высоты ортометрические (или с натяжкой нормальные), ПРИБАВЛЯЙТЕ высоту геоида, чтобы получить геодезические высоты"
+        )
+
+        self._bind_statusbar_hint(
+            self.m_rb_tgt_action,
+            "Так как EGM2008 определён относительно WGS-84, если WGS-84 не задана как одна из СК, коррекция высот недоступна"
         )
 
     def _format_crs(self, fmt: str) -> Optional[str]:

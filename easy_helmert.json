@@ -1,0 +1,79 @@
+{
+    "version": "auto-py-to-exe-configuration_v1",
+    "pyinstaller": {
+        "filenames": ["src/main.py"],
+        "onefile": true,
+        "console": false,
+        "icon": "resources/icons/icon.ico",
+        "add_data": [
+            {
+                "source": "resources",
+                "destination": "resources"
+            }
+        ],
+        "hidden_imports": [
+            "wx",
+            "wx.xrc",
+            "wx.grid",
+            "wx.dataview",
+            "pyproj",
+            "pyproj.datadir",
+            "pyproj._datadir",
+            "pyproj.transformer",
+            "pyproj.crs",
+            "pyproj.crs.crs",
+            "rasterio",
+            "rasterio._shim",
+            "rasterio.control",
+            "rasterio.crs",
+            "rasterio.sample",
+            "rasterio.vrt",
+            "rasterio._features",
+            "rasterio.windows",
+            "scipy",
+            "scipy.optimize",
+            "scipy.optimize._minpack_py",
+            "scipy.optimize._lsq",
+            "scipy.linalg",
+            "scipy.linalg.cython_blas",
+            "scipy.linalg.cython_lapack",
+            "scipy.sparse.csgraph._validation",
+            "pandas",
+            "pandas._libs.tslibs.np_datetime",
+            "pandas._libs.tslibs.nattype",
+            "pandas._libs.tslibs.timedeltas",
+            "pydantic",
+            "pydantic.deprecated.class_validators",
+            "pydantic.v1",
+            "sqlite3"
+        ],
+        "collect_submodules": [
+            "pyproj",
+            "rasterio"
+        ],
+        "collect_data": [
+            "pyproj",
+            "rasterio"
+        ],
+        "collect_binaries": [
+            "rasterio",
+            "pyproj"
+        ],
+        "collect_all": [],
+        "copy_metadata": [
+            "pyproj",
+            "rasterio",
+            "scipy",
+            "pandas",
+            "pydantic",
+            "wxPython"
+        ],
+        "recursive_copy_metadata": [],
+        "other_options": "--clean --noconfirm"
+    },
+    "auto-py-to-exe": {
+        "general": {
+            "outputDirectory": "dist"
+        }
+    }
+}

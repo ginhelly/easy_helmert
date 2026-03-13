@@ -77,48 +77,54 @@ def _normalize_number(raw: str, dec_sep: str) -> str:
 # ── Определение столбцов ─────────────────────────────────────────────────────
 
 class _Col:
-    USE_PLAN = 0   # ✓ план  (чекбокс)
-    USE_H    = 1   # ✓ выс   (чекбокс)
-    NAME     = 2   # Имя
-    X1       = 3   # X исходная СК
-    Y1       = 4   # Y исходная СК
-    H1       = 5   # H исходная СК
-    X2       = 6   # X целевая СК
-    Y2       = 7   # Y целевая СК
-    H2       = 8   # H целевая СК
-    DX       = 9   # невязка dX  (readonly)
-    DY       = 10  # невязка dY  (readonly)
-    DH       = 11  # невязка dH  (readonly)
-    DE       = 12   # невязка dE, м
-    DN       = 13   # невязка dN, м
-    DU       = 14   # невязка dU, м
-    COUNT    = 15
+    USE_PLAN = 0
+    USE_H    = 1
+    NAME     = 2
+    X1       = 3
+    Y1       = 4
+    H1       = 5
+    H1_CORR  = 6   # скорректированная высота исходной СК (readonly)
+    X2       = 7
+    Y2       = 8
+    H2       = 9
+    H2_CORR  = 10  # скорректированная высота опорной СК (readonly)
+    DX       = 11
+    DY       = 12
+    DH       = 13
+    DE       = 14
+    DN       = 15
+    DU       = 16
+    COUNT    = 17
 
 
 # (заголовок, мин. ширина px, readonly, flex-вес для авторастяжки)
 # flex-вес == 0  →  фиксированная ширина, не растягивается
 _COL_DEFS: List[Tuple[str, int, bool, float]] = [
-    ("✓ пл",   40, False, 0.0),   # USE_PLAN
-    ("✓ выс",  40, False, 0.0),   # USE_H
-    ("Имя",    90, False, 0.0),   # NAME
-    ("Восток исх.", 90, False, 1.2),   # X1
-    ("Север исх.", 90, False, 1.2),   # Y1
-    ("Высота исх.", 82, False, 1.0),   # H1
-    ("Восток опорн.", 90, False, 1.2),   # X2
-    ("Север опорн.", 90, False, 1.2),   # Y2
-    ("Высота опорн.", 82, False, 1.0),   # H2
-    ("ΔX, м",   72, True,  0.8),   # геоцентрические невязки, метры
-    ("ΔY, м",   72, True,  0.8),
-    ("ΔZ, м",   72, True,  0.8),
-    ("dE, м",   72, True,  0.8),   # практические невязки ENU, метры
-    ("dN, м",   72, True,  0.8),
-    ("dU, м",   72, True,  0.8),
+    ("✓ пл",            40,  False, 0.0),   # USE_PLAN
+    ("✓ выс",           40,  False, 0.0),   # USE_H
+    ("Имя",             90,  False, 0.0),   # NAME
+    ("Восток исх.",     90,  False, 1.2),   # X1
+    ("Север исх.",      90,  False, 1.2),   # Y1
+    ("Высота исх.",     82,  False, 1.0),   # H1
+    ("H исх. скорр.",  130,  True,  0.0),   # H1_CORR ← новый, фиксированная ширина
+    ("Восток опорн.",   90,  False, 1.2),   # X2
+    ("Север опорн.",    90,  False, 1.2),   # Y2
+    ("Высота опорн.",   82,  False, 1.0),   # H2
+    ("H опорн. скорр.", 130, True,  0.0),   # H2_CORR ← новый, фиксированная ширина
+    ("ΔX, м",           72,  True,  0.8),   # DX
+    ("ΔY, м",           72,  True,  0.8),   # DY
+    ("ΔZ, м",           72,  True,  0.8),   # DH
+    ("dE, м",           72,  True,  0.8),   # DE
+    ("dN, м",           72,  True,  0.8),   # DN
+    ("dU, м",           72,  True,  0.8),   # DU
 ]
 
 _READONLY_COLS = frozenset({
+    _Col.H1_CORR, _Col.H2_CORR,
     _Col.DX, _Col.DY, _Col.DH,
-    _Col.DE, _Col.DN, _Col.DU,   # ← добавлены
+    _Col.DE, _Col.DN, _Col.DU,
 })
+
 _CHECKBOX_COLS  = frozenset({_Col.USE_PLAN, _Col.USE_H})
 _NUMERIC_COLS   = frozenset({
     _Col.X1, _Col.Y1, _Col.H1,
@@ -131,6 +137,7 @@ _EDITABLE_NUM   = _NUMERIC_COLS - _READONLY_COLS   # числовые редак
 _CLR_OK  = wx.Colour(198, 239, 206)   # зелёный — норма
 _CLR_BAD = wx.Colour(255, 199, 206)   # красный — превышение
 _CLR_NA  = wx.Colour(235, 235, 235)   # серый   — нет данных
+_CLR_GEOID = wx.Colour(210, 232, 252) # светло-голубой: есть данные геоида
 
 _DEFAULT_THRESHOLD = 0.1              # порог подсветки (единицы СК)
 
@@ -825,7 +832,7 @@ class CoordinateGrid(gridlib.Grid):
             if row >= self.GetNumberRows():
                 break
             if res is None:
-                for col in _READONLY_COLS:
+                for col in (_Col.DX, _Col.DY, _Col.DH):   # ← только свои колонки
                     self.SetCellValue(row, col, "")
                     self.SetCellBackgroundColour(row, col, _CLR_NA)
                 continue
@@ -866,7 +873,7 @@ class CoordinateGrid(gridlib.Grid):
             if row >= self.GetNumberRows():
                 break
             if res is None:
-                for col in (_Col.DE, _Col.DN, _Col.DU):
+                for col in (_Col.DE, _Col.DN, _Col.DU):   # ← только свои колонки
                     self.SetCellValue(row, col, "")
                     self.SetCellBackgroundColour(row, col, _CLR_NA)
                 continue
@@ -898,6 +905,7 @@ class CoordinateGrid(gridlib.Grid):
         n = self.GetNumberRows()
         self.update_residuals([None] * n)
         self.update_metric_residuals([None] * n)
+        self.clear_geoid_heights()
 
     # ── Вспомогательные ───────────────────────────────────────────────────────
 
@@ -923,3 +931,39 @@ class CoordinateGrid(gridlib.Grid):
                 result.append(line.split())
         return [r for r in result if any(c.strip() for c in r)]
     
+    def update_geoid_heights(
+        self,
+        src_info: List[Optional[Tuple[float, float]]],
+        tgt_info: List[Optional[Tuple[float, float]]],
+    ):
+        """
+        Обновить столбцы «H исх. скорр.» и «H опорн. скорр.».
+
+        src_info[i] / tgt_info[i]:
+        (h_corrected, n_geoid) — показывает «120.4530 (ζ=+28.1234)»
+        None                   — ячейка пуста (серый фон)
+        """
+        for col, info_list in (
+            (_Col.H1_CORR, src_info),
+            (_Col.H2_CORR, tgt_info),
+        ):
+            for row, info in enumerate(info_list):
+                if row >= self.GetNumberRows():
+                    break
+                if info is None:
+                    self.SetCellValue(row, col, "")
+                    self.SetCellBackgroundColour(row, col, _CLR_NA)
+                else:
+                    h_corr, n_geoid = info
+                    self.SetCellValue(row, col, f"{h_corr:.4f} (ζ={n_geoid:+.4f})")
+                    self.SetCellBackgroundColour(row, col, _CLR_GEOID)
+        self.ForceRefresh()
+
+    def clear_geoid_heights(self):
+        """Сбросить столбцы геоида (вызывается при изменении входных данных)."""
+        n = self.GetNumberRows()
+        for col in (_Col.H1_CORR, _Col.H2_CORR):
+            for row in range(n):
+                self.SetCellValue(row, col, "")
+                self.SetCellBackgroundColour(row, col, _CLR_NA)
+        self.ForceRefresh()
