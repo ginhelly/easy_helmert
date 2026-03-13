@@ -21,13 +21,12 @@
 - Выбор СК из базы данных **EPSG + МСК РФ** или ввод вручную (WKT / Proj4)
 - Экспорт результирующей СК в форматах **WKT1**, **WKT2**, **Proj4 / PRJ**
 - Вывод невязок в геоцентрических (ΔX ΔY ΔZ) и метрических (dE dN dU) единицах
-- Подсветка грубых невязок по порогу (в метрах или кратно СКО)
 
 ---
 
 ## Скриншот
 
-> *(добавьте скриншот главного окна)*
+![Easy Helmert](resources/screenshot.png)
 
 ---
 
@@ -36,13 +35,7 @@
 ### Готовый exe (Windows)
 
 1. Скачайте `EasyHelmert.exe` со страницы [Releases](../../releases)
-2. Скачайте файл геоида `egm08_25.gtx` (\~30 МБ):
-   - [egm08_25.gtx @ PROJ CDN](https://cdn.proj.org/us_nga_egm08_25.tif)
-   - Переименуйте в `egm08_25.gtx` и положите рядом с exe
-   - **Без этого файла поправка по геоиду недоступна**, всё остальное работает
-3. Запустите `EasyHelmert.exe`
-
-> Файл геоида не входит в поставку из-за размера (\~30 МБ).
+2. Запустите `EasyHelmert.exe`
 
 ---
 
@@ -51,7 +44,7 @@
 **Требования:** Python 3.11+, [uv](https://github.com/astral-sh/uv)
 
 ```bash
-git clone https://github.com/yourname/easy-helmert.git
+git clone https://github.com/ginhelly/easy_helmert.git
 cd easy-helmert
 
 # Установить зависимости
