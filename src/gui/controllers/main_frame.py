@@ -6,6 +6,7 @@ from core.models import *
 from gui.forms.easy_helmert_base import BaseMainFrame
 from gui.widgets.coordinate_grid import CoordinateGrid
 from utils.xrc_loader import xrc
+from utils.resources import get_resource
 
 
 class MainFrame(BaseMainFrame):

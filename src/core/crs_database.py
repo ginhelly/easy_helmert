@@ -11,6 +11,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from utils.resources import get_resource
+
 # ── Человекочитаемые названия подкатегорий (проецированные) ──────────────────
 
 SUBCAT_LABELS: Dict[str, str] = {
@@ -91,23 +93,6 @@ class CrsEntry:
 _DB_PATH: Optional[str] = None
 
 
-def get_db_path() -> Optional[str]:
-    global _DB_PATH
-    if _DB_PATH and os.path.isfile(_DB_PATH):
-        return _DB_PATH
-    here = os.path.dirname(os.path.abspath(__file__))
-    candidates = [
-        os.path.normpath(os.path.join(here, "..", "..", "resources", "combined_crs.db")),
-        os.path.normpath(os.path.join(here, "..", "..", "..", "resources", "combined_crs.db")),
-        os.path.join(os.path.dirname(here), "resources", "combined_crs.db"),
-    ]
-    for c in candidates:
-        if os.path.isfile(c):
-            _DB_PATH = c
-            return c
-    return None
-
-
 def set_db_path(path: str):
     global _DB_PATH
     _DB_PATH = path
@@ -117,7 +102,8 @@ def set_db_path(path: str):
 
 def load_all_entries(db_path: Optional[str] = None) -> List[CrsEntry]:
     if db_path is None:
-        db_path = get_db_path()
+        p = get_resource("combined_crs.db")
+        db_path = str(p) if p else None
     if db_path is None:
         return []
 

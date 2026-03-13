@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from utils.resources import get_resource
+
 class XRCLoader:
     """Загрузчик XRC ресурсов с поддержкой разработки и собранного exe."""
     
@@ -27,33 +29,8 @@ class XRCLoader:
         return self._loaded
     
     def _find_xrc_file(self, filename: str, subdir: str) -> Optional[Path]:
-        """Поиск XRC файла в разных местах."""
-        
-        # Список мест для поиска
-        search_paths = []
-        
-        # 1. В собранном exe
-        if hasattr(sys, '_MEIPASS'):
-            search_paths.append(Path(sys._MEIPASS) / "resources" / subdir / filename)
-        
-        # 2. В разработке - разные варианты
-        current_file = Path(__file__).resolve()
-        
-        # От текущего файла
-        search_paths.append(current_file.parent.parent.parent / "resources" / subdir / filename)
-        
-        # От корня проекта (если запуск из корня)
-        search_paths.append(Path.cwd() / "resources" / subdir / filename)
-        
-        # Абсолютный путь
-        search_paths.append(Path.home() / "projects" / "transformer_app" / "resources" / subdir / filename)
-        
-        # Проверяем каждый путь
-        for path in search_paths:
-            if path.exists():
-                return path
-        
-        return None
+        p = get_resource(f"{subdir}/{filename}")
+        return p
     
     def get_bitmap(self, name: str, size: tuple = None) -> wx.Bitmap:
         """Получить битмап по имени."""
