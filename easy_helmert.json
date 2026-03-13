@@ -1,79 +1,205 @@
 {
-    "version": "auto-py-to-exe-configuration_v1",
-    "pyinstaller": {
-        "filenames": ["src/main.py"],
-        "onefile": true,
-        "console": false,
-        "icon": "resources/icons/icon.ico",
-        "add_data": [
-            {
-                "source": "resources",
-                "destination": "resources"
-            }
-        ],
-        "hidden_imports": [
-            "wx",
-            "wx.xrc",
-            "wx.grid",
-            "wx.dataview",
-            "pyproj",
-            "pyproj.datadir",
-            "pyproj._datadir",
-            "pyproj.transformer",
-            "pyproj.crs",
-            "pyproj.crs.crs",
-            "rasterio",
-            "rasterio._shim",
-            "rasterio.control",
-            "rasterio.crs",
-            "rasterio.sample",
-            "rasterio.vrt",
-            "rasterio._features",
-            "rasterio.windows",
-            "scipy",
-            "scipy.optimize",
-            "scipy.optimize._minpack_py",
-            "scipy.optimize._lsq",
-            "scipy.linalg",
-            "scipy.linalg.cython_blas",
-            "scipy.linalg.cython_lapack",
-            "scipy.sparse.csgraph._validation",
-            "pandas",
-            "pandas._libs.tslibs.np_datetime",
-            "pandas._libs.tslibs.nattype",
-            "pandas._libs.tslibs.timedeltas",
-            "pydantic",
-            "pydantic.deprecated.class_validators",
-            "pydantic.v1",
-            "sqlite3"
-        ],
-        "collect_submodules": [
-            "pyproj",
-            "rasterio"
-        ],
-        "collect_data": [
-            "pyproj",
-            "rasterio"
-        ],
-        "collect_binaries": [
-            "rasterio",
-            "pyproj"
-        ],
-        "collect_all": [],
-        "copy_metadata": [
-            "pyproj",
-            "rasterio",
-            "scipy",
-            "pandas",
-            "pydantic",
-            "wxPython"
-        ],
-        "recursive_copy_metadata": [],
-        "other_options": "--clean --noconfirm"
-    },
-    "auto-py-to-exe": {
-        "general": {
-            "outputDirectory": "dist"
-        }
-    }
+ "version": "auto-py-to-exe-configuration_v1",
+ "pyinstallerOptions": [
+  {
+   "optionDest": "noconfirm",
+   "value": true
+  },
+  {
+   "optionDest": "filenames",
+   "value": "C:/projects/calibration_computation/easy_helmert/src/main.py"
+  },
+  {
+   "optionDest": "onefile",
+   "value": true
+  },
+  {
+   "optionDest": "console",
+   "value": false
+  },
+  {
+   "optionDest": "icon_file",
+   "value": "C:/projects/calibration_computation/easy_helmert/resources/easy_helmert.ico"
+  },
+  {
+   "optionDest": "clean_build",
+   "value": false
+  },
+  {
+   "optionDest": "strip",
+   "value": false
+  },
+  {
+   "optionDest": "noupx",
+   "value": false
+  },
+  {
+   "optionDest": "disable_windowed_traceback",
+   "value": false
+  },
+  {
+   "optionDest": "uac_admin",
+   "value": false
+  },
+  {
+   "optionDest": "uac_uiaccess",
+   "value": false
+  },
+  {
+   "optionDest": "argv_emulation",
+   "value": false
+  },
+  {
+   "optionDest": "bootloader_ignore_signals",
+   "value": false
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/projects/calibration_computation/easy_helmert/resources;resources/"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "wx"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "wx.xrc"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "wx.grid"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "wx.dataview"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj.datadir"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj._datadir"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj.transformer"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj.crs"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj.crs.crs"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio._shim"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.control"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.crs"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.sample"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.vrt"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio._features"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.windows"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "scipy.optimize"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "scipy.optimize._lsq"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "scipy.linalg.cython_blas"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "scipy.linalg.cython_lapack"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pydantic"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pydantic.deprecated.class_validators"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "sqlite3"
+  },
+  {
+   "optionDest": "collect_data",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "collect_data",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "collect_binaries",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "collect_binaries",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "collect_submodules",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "collect_submodules",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "copy_metadata",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "copy_metadata",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "copy_metadata",
+   "value": "scipy"
+  },
+  {
+   "optionDest": "copy_metadata",
+   "value": "pydantic"
+  }
+ ],
+ "nonPyinstallerOptions": {
+  "increaseRecursionLimit": true,
+  "manualArguments": ""
+ }
 }
