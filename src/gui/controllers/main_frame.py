@@ -39,6 +39,21 @@ class MainFrame(BaseMainFrame):
 
     def _init_ui(self):
         """Создание виджетов, которые нельзя/неудобно делать в FormBuilder."""
+        import sys
+        from utils.resources import get_resource
+
+        # Windows 11: привязка иконки к приложению, а не к python.exe
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "easyhelmert.app.1.0"
+            )
+
+        icon_path = get_resource("icons/easy_helmert.ico")
+        if icon_path:
+            # IconBundle передаёт ВСЕ размеры из .ico → Windows выбирает нужный
+            bundle = wx.IconBundle(str(icon_path), wx.BITMAP_TYPE_ICO)
+            self.SetIcons(bundle)
 
         # 1. Вставляем CoordinateGrid в placeholder-панель из FormBuilder
         self.coord_grid = CoordinateGrid(

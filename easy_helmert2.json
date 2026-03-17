@@ -1,0 +1,225 @@
+{
+ "version": "auto-py-to-exe-configuration_v1",
+ "pyinstallerOptions": [
+  {
+   "optionDest": "noconfirm",
+   "value": true
+  },
+  {
+   "optionDest": "filenames",
+   "value": "C:/projects/calibration_computation/easy_helmert/src/main.py"
+  },
+  {
+   "optionDest": "onefile",
+   "value": true
+  },
+  {
+   "optionDest": "console",
+   "value": false
+  },
+  {
+   "optionDest": "icon_file",
+   "value": "C:/projects/calibration_computation/easy_helmert/resources/easy_helmert.ico"
+  },
+  {
+   "optionDest": "clean_build",
+   "value": false
+  },
+  {
+   "optionDest": "strip",
+   "value": false
+  },
+  {
+   "optionDest": "noupx",
+   "value": false
+  },
+  {
+   "optionDest": "disable_windowed_traceback",
+   "value": false
+  },
+  {
+   "optionDest": "uac_admin",
+   "value": false
+  },
+  {
+   "optionDest": "uac_uiaccess",
+   "value": false
+  },
+  {
+   "optionDest": "argv_emulation",
+   "value": false
+  },
+  {
+   "optionDest": "bootloader_ignore_signals",
+   "value": false
+  },
+  {
+   "optionDest": "datas",
+   "value": "C:/projects/calibration_computation/easy_helmert/resources;resources/"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "wx"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "wx.xrc"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "wx.grid"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "wx.dataview"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj.datadir"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj._datadir"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj.transformer"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj.crs"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pyproj.crs.crs"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio._shim"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.control"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.crs"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.sample"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.vrt"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio._features"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "rasterio.windows"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "scipy.optimize"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "scipy.optimize._lsq"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "scipy.linalg.cython_blas"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "scipy.linalg.cython_lapack"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pydantic"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "pydantic.deprecated.class_validators"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": "sqlite3"
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": ""
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": ""
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": ""
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": ""
+  },
+  {
+   "optionDest": "hiddenimports",
+   "value": ""
+  },
+  {
+   "optionDest": "collect_data",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "collect_data",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "collect_binaries",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "collect_binaries",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "collect_submodules",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "collect_submodules",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "copy_metadata",
+   "value": "pyproj"
+  },
+  {
+   "optionDest": "copy_metadata",
+   "value": "rasterio"
+  },
+  {
+   "optionDest": "copy_metadata",
+   "value": "scipy"
+  },
+  {
+   "optionDest": "copy_metadata",
+   "value": "pydantic"
+  }
+ ],
+ "nonPyinstallerOptions": {
+  "increaseRecursionLimit": true,
+  "manualArguments": ""
+ }
+}
