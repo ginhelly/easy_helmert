@@ -169,6 +169,10 @@ class CoordinateGrid(gridlib.Grid):
         self._dec_sep = _sys_dec_sep() # системный разделитель
         self._on_data_changed   = on_data_changed   
         self._text_editor_ctrl = None
+        self._computed_cells: set[tuple[int, int]] = set()
+        self._normal_cell_font = wx.Font(self.GetDefaultCellFont())
+        self._bold_cell_font = wx.Font(self.GetDefaultCellFont())
+        self._bold_cell_font.SetWeight(wx.FONTWEIGHT_BOLD)
         self._setup_grid()
         self._bind_events()
 
@@ -298,6 +302,8 @@ class CoordinateGrid(gridlib.Grid):
         Вызывается при любом изменении данных пользователем.
         Уведомляет владельца (main_frame) через переданный callback.
         """
+        if self._busy:
+            return
         if callable(self._on_data_changed):
             self._on_data_changed()
 
@@ -345,8 +351,10 @@ class CoordinateGrid(gridlib.Grid):
 
     # Нормализация после сохранения ячейки
     def _on_cell_changed(self, event):
-        self._notify_changed()
         row, col = event.GetRow(), event.GetCol()
+        if not self._busy and (row, col) in self._computed_cells:
+            self._clear_computed_cell(row, col)
+        self._notify_changed()
         if col in _EDITABLE_NUM:
             raw        = self.GetCellValue(row, col)
             try:
@@ -767,6 +775,7 @@ class CoordinateGrid(gridlib.Grid):
             }
         """
         self._busy = True
+        self._computed_cells.clear()
         if self.GetNumberRows():
             self.DeleteRows(0, self.GetNumberRows())
 
@@ -966,4 +975,135 @@ class CoordinateGrid(gridlib.Grid):
             for row in range(n):
                 self.SetCellValue(row, col, "")
                 self.SetCellBackgroundColour(row, col, _CLR_NA)
+        self.ForceRefresh()
+    
+    def _mark_computed_cell(self, row: int, col: int):
+        """Помечает ячейку как автоматически вычисленную."""
+        self.SetCellFont(row, col, self._bold_cell_font)
+        self._computed_cells.add((row, col))
+
+    def _clear_computed_cell(self, row: int, col: int):
+        """Снимает пометку автоматически вычисленной ячейки."""
+        if (row, col) in self._computed_cells:
+            self.SetCellFont(row, col, self._normal_cell_font)
+            self._computed_cells.discard((row, col))
+
+    def clear_computed_marks(self):
+        """Сбросить жирное выделение у всех автоматически вычисленных ячеек."""
+        for row, col in list(self._computed_cells):
+            self.SetCellFont(row, col, self._normal_cell_font)
+        self._computed_cells.clear()
+        self.ForceRefresh()
+
+    def row_has_computed_coordinates(self, row: int) -> bool:
+        """
+        True, если в строке есть автоматически вычисленные координаты.
+        Такие строки не должны участвовать в следующем расчёте МНК,
+        пока пользователь не отредактирует их вручную.
+        """
+        coord_cols = {
+            _Col.X1, _Col.Y1, _Col.H1,
+            _Col.X2, _Col.Y2, _Col.H2,
+        }
+        return any((row, col) in self._computed_cells for col in coord_cols)
+
+    def get_data_with_row_indices(self) -> List[tuple[int, dict]]:
+        """
+        То же, что get_data(), но возвращает ещё и физический индекс строки грида.
+
+        Нужно для корректного разворота невязок и автозаполнения обратно
+        в реальные строки таблицы, даже если между ними есть пустые строки.
+        """
+        result = []
+        for row in range(self.GetNumberRows()):
+            x1 = self.GetCellValue(row, _Col.X1).strip()
+            y1 = self.GetCellValue(row, _Col.Y1).strip()
+            x2 = self.GetCellValue(row, _Col.X2).strip()
+            y2 = self.GetCellValue(row, _Col.Y2).strip()
+            if not (x1 or y1 or x2 or y2):
+                continue
+            result.append((
+                row,
+                {
+                    "enabled_plan": self.GetCellValue(row, _Col.USE_PLAN) == "1",
+                    "enabled_h":    self.GetCellValue(row, _Col.USE_H)    == "1",
+                    "name": self.GetCellValue(row, _Col.NAME).strip(),
+                    "x1": x1,
+                    "y1": y1,
+                    "h1": self.GetCellValue(row, _Col.H1).strip(),
+                    "x2": x2,
+                    "y2": y2,
+                    "h2": self.GetCellValue(row, _Col.H2).strip(),
+                }
+            ))
+        return result
+
+    def fill_missing_coordinates(self, predictions: dict[int, dict[str, str]]) -> int:
+        """
+        Заполняет пустые координатные ячейки вычисленными значениями и помечает
+        их жирным шрифтом.
+
+        predictions:
+            {
+                row_index: {
+                    "x1": "...",
+                    "y1": "...",
+                    "h1": "...",
+                    "x2": "...",
+                    "y2": "...",
+                    "h2": "...",
+                }
+            }
+
+        Возвращает количество реально заполненных ячеек.
+        """
+        key_to_col = {
+            "x1": _Col.X1, "y1": _Col.Y1, "h1": _Col.H1,
+            "x2": _Col.X2, "y2": _Col.Y2, "h2": _Col.H2,
+        }
+
+        filled = 0
+        self._busy = True
+        try:
+            for row, data in predictions.items():
+                if row >= self.GetNumberRows():
+                    continue
+                for key, value in data.items():
+                    if value is None or value == "":
+                        continue
+                    col = key_to_col[key]
+                    if not self.GetCellValue(row, col).strip():
+                        self.SetCellValue(row, col, value)
+                        self._mark_computed_cell(row, col)
+                        filled += 1
+        finally:
+            self._busy = False
+
+        self.ForceRefresh()
+        return filled
+
+    def update_geoid_heights_partial(self, src_updates, tgt_updates):
+        for row, (h, n) in src_updates.items():
+            self.SetCellValue(row, _Col.H1_CORR, f"{h:.4f} (ζ {n:+.4f})")
+            self.SetCellBackgroundColour(row, _Col.H1_CORR, _CLR_GEOID)
+        for row, (h, n) in tgt_updates.items():
+            self.SetCellValue(row, _Col.H2_CORR, f"{h:.4f} (ζ {n:+.4f})")
+            self.SetCellBackgroundColour(row, _Col.H2_CORR, _CLR_GEOID)
+        self.ForceRefresh()
+
+    def clear_autofilled_coordinates(self):
+        """
+        Удаляет значения только из автодостроенных координатных ячеек
+        (помеченных жирным), и снимает пометки.
+        """
+        coord_cols = {_Col.X1, _Col.Y1, _Col.H1, _Col.X2, _Col.Y2, _Col.H2}
+        self._busy = True
+        try:
+            for row, col in list(self._computed_cells):
+                if col in coord_cols and row < self.GetNumberRows():
+                    self.SetCellValue(row, col, "")
+                    self.SetCellFont(row, col, self._normal_cell_font)
+                self._computed_cells.discard((row, col))
+        finally:
+            self._busy = False
         self.ForceRefresh()

@@ -50,6 +50,15 @@ class GeoidAction(IntEnum):
     NOTHING  = 2   # Ничего не делать
 
 
+def table_to_calc(h, action, n_eff):
+    if h is None or n_eff is None or action == GeoidAction.NOTHING: return h
+    return h + n_eff if action == GeoidAction.ADD else h - n_eff
+
+def calc_to_table(h, action, n_eff):
+    if h is None or n_eff is None or action == GeoidAction.NOTHING: return h
+    return h - n_eff if action == GeoidAction.ADD else h + n_eff
+
+
 @dataclass
 class GeoidCorrectionInfo:
     """
@@ -63,6 +72,7 @@ class GeoidCorrectionInfo:
     src: List[Optional[Tuple[float, float]]] = _dc_field(default_factory=list)
     tgt: List[Optional[Tuple[float, float]]] = _dc_field(default_factory=list)
     delta_zeta_mean: Optional[float] = None
+    naive_params: Optional[TransformationParams] = None
 
 
 # ── Проверка связи СК с WGS-84 ────────────────────────────────────────────────
@@ -520,5 +530,128 @@ def calculate_helmert_with_geoid(
         src             = src_display,
         tgt             = tgt_display,
         delta_zeta_mean = delta_zeta_mean,
+        naive_params=naive_params
     )
     return result, geoid_info
+
+
+def build_geoid_context_for_rows(
+    raw_items,
+    source_crs: CRS,
+    target_crs: CRS,
+    naive_params: TransformationParams,
+    delta_zeta_mean: Optional[float] = None,
+) -> dict[int, dict[str, float]]:
+    """
+    Строит геоидный контекст для строк таблицы.
+
+    Возвращает:
+      {
+        row: {
+          "n_src": ...,
+          "n_tgt": ...,
+          "n_src_eff": ...,
+          "n_tgt_eff": ...,
+        }
+      }
+
+    Где:
+      - n_src / n_tgt      : ондуляции на эллипсоидах source/target
+      - n_src_eff          : n_src + delta_zeta_mean (если задано)
+      - n_tgt_eff          : n_tgt (без delta_zeta)
+
+    Логика:
+      1) Если в строке есть source XY -> позицию берем с source-стороны
+      2) Иначе, если source XY нет, но есть target XY -> берем с target-стороны
+      3) Для каждой позиции считаем lon/lat в WGS, скалываем EGM, пересчитываем
+         на эллипсоиды source/target.
+    """
+    geoid_path = _find_geoid_path()
+    local_crs, wgs84_crs = _split_local_wgs84(source_crs, target_crs)
+    dz = float(delta_zeta_mean) if delta_zeta_mean is not None else 0.0
+
+    result: dict[int, dict[str, float]] = {}
+
+    def _safe_f(v, default=0.0):
+        try:
+            if v is None:
+                return float(default)
+            s = str(v).strip()
+            if not s:
+                return float(default)
+            return float(s.replace(",", "."))
+        except Exception:
+            return float(default)
+
+    # ── Группа 1: строки, где есть source XY (приоритет source) ─────────────
+    rows_src, xs_src, ys_src, hs_src = [], [], [], []
+    for row, r in raw_items:
+        has_src_xy = bool(str(r.get("x1", "")).strip() and str(r.get("y1", "")).strip())
+        if not has_src_xy:
+            continue
+
+        rows_src.append(row)
+        xs_src.append(_safe_f(r.get("x1")))
+        ys_src.append(_safe_f(r.get("y1")))
+        hs_src.append(_safe_f(r.get("h1"), 0.0))
+
+    if rows_src:
+        lons, lats = _wgs84_lonlat_for(
+            xs_src, ys_src, hs_src,
+            source_crs,         # given_crs
+            local_crs,
+            wgs84_crs,
+            naive_params,       # local -> WGS
+        )
+
+        n_wgs = _sample_egm2008(lons, lats, geoid_path)
+        n_src = _undulation_on_ellipsoid(lons, lats, n_wgs, source_crs, naive_params)
+        n_tgt = _undulation_on_ellipsoid(lons, lats, n_wgs, target_crs, naive_params)
+
+        for i, row in enumerate(rows_src):
+            nsrc = float(n_src[i])
+            ntgt = float(n_tgt[i])
+            result[row] = {
+                "n_src": nsrc,
+                "n_tgt": ntgt,
+                "n_src_eff": nsrc + dz,
+                "n_tgt_eff": ntgt,
+            }
+
+    # ── Группа 2: строки только с target XY (source XY отсутствуют) ──────────
+    rows_tgt, xs_tgt, ys_tgt, hs_tgt = [], [], [], []
+    for row, r in raw_items:
+        has_src_xy = bool(str(r.get("x1", "")).strip() and str(r.get("y1", "")).strip())
+        has_tgt_xy = bool(str(r.get("x2", "")).strip() and str(r.get("y2", "")).strip())
+        if has_src_xy or not has_tgt_xy:
+            continue
+
+        rows_tgt.append(row)
+        xs_tgt.append(_safe_f(r.get("x2")))
+        ys_tgt.append(_safe_f(r.get("y2")))
+        hs_tgt.append(_safe_f(r.get("h2"), 0.0))
+
+    if rows_tgt:
+        lons, lats = _wgs84_lonlat_for(
+            xs_tgt, ys_tgt, hs_tgt,
+            target_crs,         # given_crs (ВАЖНО: именно target)
+            local_crs,
+            wgs84_crs,
+            naive_params,       # local -> WGS
+        )
+
+        n_wgs = _sample_egm2008(lons, lats, geoid_path)
+        n_src = _undulation_on_ellipsoid(lons, lats, n_wgs, source_crs, naive_params)
+        n_tgt = _undulation_on_ellipsoid(lons, lats, n_wgs, target_crs, naive_params)
+
+        for i, row in enumerate(rows_tgt):
+            nsrc = float(n_src[i])
+            ntgt = float(n_tgt[i])
+            result[row] = {
+                "n_src": nsrc,
+                "n_tgt": ntgt,
+                "n_src_eff": nsrc + dz,
+                "n_tgt_eff": ntgt,
+            }
+
+    return result

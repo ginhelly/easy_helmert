@@ -371,3 +371,85 @@ def compute_metric_residuals(
         dn = (yp_m - ya_m).tolist()
 
     return [(float(de[i]), float(dn[i]), float(du[i])) for i in range(len(x1))]
+
+
+def make_inverse_helmert_transformer(
+    source_crs: CRS,
+    target_crs: CRS,
+    params: TransformationParams,
+):
+    """
+    Возвращает callable(x, y, h) → (x, y, h): target_crs → source_crs.
+
+    Это обратный ход к make_helmert_transformer(), но без приближённой
+    инверсии через «отрицательные параметры» на уровне GUI-представления.
+
+    Используется для автодостраивания координат:
+      - если известна только опорная точка, вычисляем исходную
+      - если известна только исходная, используем прямой трансформер
+    """
+    import numpy as np
+
+    ARCSEC_TO_RAD = np.pi / (180.0 * 3600.0)
+
+    base_src = base_crs(source_crs)
+    base_tgt = base_crs(target_crs)
+
+    a_src, f_src = ellipsoid(base_src)
+    a_tgt, f_tgt = ellipsoid(base_tgt)
+
+    # target → target geodetic
+    tf_to_geo = Transformer.from_crs(base_tgt, base_tgt.geodetic_crs, always_xy=True)
+    # source geodetic → source
+    tf_from_geo = Transformer.from_crs(base_src.geodetic_crs, base_src, always_xy=True)
+
+    dX = params.dx
+    dY = params.dy
+    dZ = params.dz
+    rX = params.rx_sec * ARCSEC_TO_RAD
+    rY = params.ry_sec * ARCSEC_TO_RAD
+    rZ = params.rz_sec * ARCSEC_TO_RAD
+    dS = params.ds_raw
+
+    M = 1.0 + dS
+    T = np.array([dX, dY, dZ])
+
+    # Та же матрица, что и в helmert_forward()
+    R = np.array([
+        [ 1.0,  -rZ,   rY],
+        [ rZ,   1.0,  -rX],
+        [-rY,    rX,  1.0],
+    ])
+
+    def _transform(xs, ys, hs):
+        xs = np.asarray(xs, float)
+        ys = np.asarray(ys, float)
+        hs = np.asarray(hs, float)
+
+        # target → target geodetic
+        lons, lats, heights = tf_to_geo.transform(xs, ys, hs)
+
+        # target BLH → ECEF
+        ecef_tgt = blh_to_ecef(
+            np.deg2rad(lats), np.deg2rad(lons), heights,
+            a_tgt, f_tgt
+        )
+
+        # Обратный Гельмерт:
+        # X_tgt = M * X_src @ R.T + T
+        # X_src = ((X_tgt - T) / M) @ R
+        ecef_src = ((ecef_tgt - T[np.newaxis, :]) / M) @ R
+
+        # source ECEF → source BLH
+        lat_s, lon_s, h_s = ecef_to_blh(
+            ecef_src[:, 0], ecef_src[:, 1], ecef_src[:, 2],
+            a_src, f_src
+        )
+
+        # source geodetic → source CRS
+        xp, yp, hp = tf_from_geo.transform(
+            np.rad2deg(lon_s), np.rad2deg(lat_s), h_s
+        )
+        return xp, yp, np.asarray(hp)
+
+    return _transform

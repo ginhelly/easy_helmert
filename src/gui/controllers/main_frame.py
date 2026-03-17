@@ -214,13 +214,18 @@ class MainFrame(BaseMainFrame):
         self.is_modified = True
 
     def on_calculate(self, event):
-        raw = self.coord_grid.get_data()
+        geoid_info = None
+        self.coord_grid.clear_autofilled_coordinates()
+        raw_items = self.coord_grid.get_data_with_row_indices()
+        raw = [d for _, d in raw_items]
 
-        valid_raw = [
-            r for r in raw
-            if r.get("x1") and r.get("y1")
-            and r.get("x2") and r.get("y2")
+        valid_items = [
+            (row, r)
+            for row, r in raw_items
+            if self._is_row_usable_for_calculation(row, r)
         ]
+
+        valid_raw = [r for _, r in valid_items]
 
         # Считаем уравнения здесь же, чтобы показать понятную ошибку до вызова ядра
         n_eq = sum(
@@ -297,14 +302,12 @@ class MainFrame(BaseMainFrame):
                     src_action, tgt_action,
                     apply_correction=apply_correction,
                 )
-                all_geoid_src = [None] * len(raw)
-                all_geoid_tgt = [None] * len(raw)
-                j = 0
-                for i, r in enumerate(raw):
-                    if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
-                        all_geoid_src[i] = geoid_info.src[j]
-                        all_geoid_tgt[i] = geoid_info.tgt[j]
-                        j += 1
+                all_geoid_src = [None] * self.coord_grid.GetNumberRows()
+                all_geoid_tgt = [None] * self.coord_grid.GetNumberRows()
+
+                for j, (grid_row, _) in enumerate(valid_items):
+                    all_geoid_src[grid_row] = geoid_info.src[j]
+                    all_geoid_tgt[grid_row] = geoid_info.tgt[j]
                 self.coord_grid.update_geoid_heights(all_geoid_src, all_geoid_tgt)
                 self._last_delta_zeta_mean = geoid_info.delta_zeta_mean
             else:
@@ -320,6 +323,7 @@ class MainFrame(BaseMainFrame):
             )
             return
         except Exception as e:
+            raise e
             wx.MessageBox(f"Ошибка расчёта:\n{e}", "Ошибка", wx.OK | wx.ICON_ERROR)
             return
 
@@ -328,24 +332,23 @@ class MainFrame(BaseMainFrame):
 
         # Разворачиваем невязки на все строки таблицы
         # valid_raw и result.residuals имеют одинаковую длину
-        all_residuals = [None] * len(raw)
-        j = 0
-        for i, r in enumerate(raw):
-            if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
-                all_residuals[i] = result.residuals[j]
-                j += 1
-
-        self.update_results(result)
+        all_residuals = [None] * self.coord_grid.GetNumberRows()
+        for j, (grid_row, _) in enumerate(valid_items):
+            all_residuals[grid_row] = result.residuals[j]
         
         # Метрические невязки dE / dN / dU
         # ENU-невязки уже в result.residuals_enu
-        all_metric = [None] * len(raw)
-        j = 0
-        for i, r in enumerate(raw):
-            if r.get("x1") and r.get("y1") and r.get("x2") and r.get("y2"):
-                all_metric[i] = result.residuals_enu[j]
-                j += 1
+        all_metric = [None] * self.coord_grid.GetNumberRows()
+        for j, (grid_row, _) in enumerate(valid_items):
+            all_metric[grid_row] = result.residuals_enu[j]
         
+        self.update_results(result)
+        filled_cells = self._autofill_missing_coordinates(raw_items, result, geoid_info)
+        if filled_cells > 0:
+            # Таблица была автоматически дополнена вычисленными координатами.
+            # Считаем это изменением данных, чтобы при закрытии можно было сохранить.
+            self.is_modified = True
+                
         threshold = self._get_threshold_m()
 
         self._last_all_residuals = all_residuals
@@ -1009,3 +1012,175 @@ class MainFrame(BaseMainFrame):
         from gui.dialogs.about_dialog import AboutDialog
         with AboutDialog(self) as dlg:
             dlg.ShowModal()
+
+    def _format_coord_value(self, value: float, crs: CRS, is_height: bool = False) -> str:
+        """
+        Форматирование координат для автозаполнения таблицы.
+        Для географических СК:
+        - lon/lat: 8 знаков
+        Для проецированных:
+        - X/Y: 4 знака
+        Для высоты:
+        - 4 знака
+        """
+        base = crs.source_crs if crs.type_name == "Bound CRS" else crs
+
+        if is_height:
+            return f"{value:.4f}"
+
+        if base.is_geographic:
+            return f"{value:.8f}"
+
+        return f"{value:.4f}"
+    
+    def _autofill_missing_coordinates(self, raw_items, result, geoid_info) -> int:
+        """
+        Достраивает отсутствующую сторону координат у неполных строк.
+
+        Правила:
+        - если сторона ЗАДАНА пользователем, её H сначала переводится
+        из табличной в расчётную (table_to_calc)
+        - после трансформации H на ВЫЧИСЛЯЕМОЙ стороне переводится
+        из расчётной в табличную (calc_to_table)
+        - H ... скорр. заполняется для тех сторон, где action != NOTHING
+        """
+        from core.geoid_correction import (
+            GeoidAction,
+            table_to_calc,
+            calc_to_table,
+            build_geoid_context_for_rows,
+        )
+        from utils.crs_utils import (
+            make_helmert_transformer,
+            make_inverse_helmert_transformer,
+        )
+
+        def _to_float(v, default=0.0):
+            if v is None:
+                return float(default)
+            s = str(v).strip()
+            if not s:
+                return float(default)
+            return float(s.replace(",", "."))
+
+        src_action, tgt_action = self._read_geoid_actions()
+        dz = geoid_info.delta_zeta_mean if geoid_info else None
+
+        # Геоидный контекст для всех строк (в т.ч. автодостраиваемых)
+        ctx = {}
+        if geoid_info and getattr(geoid_info, "naive_params", None):
+            ctx = build_geoid_context_for_rows(
+                raw_items=raw_items,
+                source_crs=self.source_crs,
+                target_crs=self.target_crs,
+                naive_params=geoid_info.naive_params,
+                delta_zeta_mean=dz,
+            )
+
+        fwd = make_helmert_transformer(self.source_crs, self.target_crs, result.params)
+        inv = make_inverse_helmert_transformer(self.source_crs, self.target_crs, result.params)
+
+        predictions: dict[int, dict[str, str]] = {}
+        geo_src: dict[int, tuple[float, float]] = {}
+        geo_tgt: dict[int, tuple[float, float]] = {}
+
+        for row, r in raw_items:
+            has_src_xy = bool(str(r.get("x1", "")).strip() and str(r.get("y1", "")).strip())
+            has_tgt_xy = bool(str(r.get("x2", "")).strip() and str(r.get("y2", "")).strip())
+
+            # Нужна ровно одна сторона
+            if has_src_xy == has_tgt_xy:
+                continue
+
+            ns = ctx.get(row, {}).get("n_src_eff")
+            nt = ctx.get(row, {}).get("n_tgt_eff")
+
+            # ── Задана исходная сторона -> вычисляем опорную ───────────────────
+            if has_src_xy and not has_tgt_xy:
+                x1 = _to_float(r.get("x1"))
+                y1 = _to_float(r.get("y1"))
+                h1_raw = r.get("h1")
+
+                if str(h1_raw).strip():
+                    h_src_table = _to_float(h1_raw)
+                    h_src_calc = table_to_calc(h_src_table, src_action, ns)
+                else:
+                    h_src_calc = 0.0
+
+                xp, yp, hp = fwd([x1], [y1], [h_src_calc])
+                h_tgt_calc = float(hp[0])
+
+                pred = {
+                    "x2": self._format_coord_value(float(xp[0]), self.target_crs, is_height=False),
+                    "y2": self._format_coord_value(float(yp[0]), self.target_crs, is_height=False),
+                }
+
+                if str(h1_raw).strip():
+                    h_tgt_table = calc_to_table(h_tgt_calc, tgt_action, nt)
+                    pred["h2"] = f"{float(h_tgt_table):.4f}"
+
+                    # H исх. скорр. (заданная сторона) — только если source action активен
+                    if src_action != GeoidAction.NOTHING:
+                        geo_src[row] = (float(h_src_calc), float(ns or 0.0))
+
+                    # H опорн. скорр. (вычисленная сторона) — только если target action активен
+                    if tgt_action != GeoidAction.NOTHING:
+                        geo_tgt[row] = (float(h_tgt_calc), float(nt or 0.0))
+
+                predictions[row] = pred
+
+            # ── Задана опорная сторона -> вычисляем исходную ───────────────────
+            elif has_tgt_xy and not has_src_xy:
+                x2 = _to_float(r.get("x2"))
+                y2 = _to_float(r.get("y2"))
+                h2_raw = r.get("h2")
+
+                if str(h2_raw).strip():
+                    h_tgt_table = _to_float(h2_raw)
+                    h_tgt_calc = table_to_calc(h_tgt_table, tgt_action, nt)
+                else:
+                    h_tgt_calc = 0.0
+
+                xp, yp, hp = inv([x2], [y2], [h_tgt_calc])
+                h_src_calc = float(hp[0])
+
+                pred = {
+                    "x1": self._format_coord_value(float(xp[0]), self.source_crs, is_height=False),
+                    "y1": self._format_coord_value(float(yp[0]), self.source_crs, is_height=False),
+                }
+
+                if str(h2_raw).strip():
+                    h_src_table = calc_to_table(h_src_calc, src_action, ns)
+                    pred["h1"] = f"{float(h_src_table):.4f}"
+
+                    # H опорн. скорр. (заданная сторона) — если target action активен
+                    if tgt_action != GeoidAction.NOTHING:
+                        geo_tgt[row] = (float(h_tgt_calc), float(nt or 0.0))
+
+                    # H исх. скорр. (вычисленная сторона) — если source action активен
+                    if src_action != GeoidAction.NOTHING:
+                        geo_src[row] = (float(h_src_calc), float(ns or 0.0))
+
+                predictions[row] = pred
+
+        filled = self.coord_grid.fill_missing_coordinates(predictions)
+        if geo_src or geo_tgt:
+            self.coord_grid.update_geoid_heights_partial(geo_src, geo_tgt)
+        return filled
+    
+
+    def _is_row_usable_for_calculation(self, row: int, r: dict) -> bool:
+        """
+        Строка пригодна для расчёта, если:
+        - есть координаты в обеих СК по плану
+        - включена хотя бы в плане или по высоте
+        - строка не содержит автодостроенных координат
+        """
+        has_both_xy = (
+            bool(r.get("x1")) and bool(r.get("y1")) and
+            bool(r.get("x2")) and bool(r.get("y2"))
+        )
+        is_enabled = bool(r.get("enabled_plan")) or bool(r.get("enabled_h"))
+        not_computed = not self.coord_grid.row_has_computed_coordinates(row)
+
+        return has_both_xy and is_enabled and not_computed
