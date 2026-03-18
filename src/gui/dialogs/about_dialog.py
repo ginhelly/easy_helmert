@@ -20,7 +20,7 @@ class AboutDialog(wx.Dialog):
         title_font.SetPointSize(16)
         title_font.SetWeight(wx.FONTWEIGHT_BOLD)
 
-        lbl_title = wx.StaticText(panel, label="Easy Helmert")
+        lbl_title = wx.StaticText(panel, label="Easy Helmert v0.9.2")
         lbl_title.SetFont(title_font)
 
         sub_font = self.GetFont()

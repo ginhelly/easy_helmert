@@ -222,8 +222,9 @@ class CoordinateGrid(gridlib.Grid):
 
         self._busy = False
 
+        self._refresh_row_labels()
         # Первичное распределение ширин после встраивания в layout
-        wx.CallAfter(self._distribute_col_widths)
+        wx.CallAfter(self.autosize_then_distribute)
 
     def _init_row(self, row: int, plan: bool = True, h: bool = True):
         """Инициализация строки: чекбоксы + выравнивание числовых ячеек."""
@@ -254,6 +255,10 @@ class CoordinateGrid(gridlib.Grid):
         if self and not self._resize_pending:
             self._resize_pending = True
             wx.CallAfter(self._distribute_col_widths)
+    
+    def autosize_then_distribute(self):
+        self.AutoSizeColumns(setAsMin=True)
+        self._distribute_col_widths()
 
     def _distribute_col_widths(self):
         """
@@ -373,6 +378,9 @@ class CoordinateGrid(gridlib.Grid):
                     wx.CallAfter(self.SetCellValue, row, col, normalized)
             except Exception:
                 pass
+        
+        if col == _Col.NAME:
+            self._refresh_row_labels()
         event.Skip()
 
     # Привязка char-фильтра к текстовому контролу редактора
@@ -580,6 +588,7 @@ class CoordinateGrid(gridlib.Grid):
         self._init_row(row)
         self.MakeCellVisible(row, 0)
         self.SetGridCursor(row, _Col.NAME)
+        self._refresh_row_labels()
         self._notify_changed()
 
     def delete_selected_rows(self, rows: List[int] = None):
@@ -596,6 +605,7 @@ class CoordinateGrid(gridlib.Grid):
                 self.SetCellValue(row, _Col.USE_PLAN, "1")
                 self.SetCellValue(row, _Col.USE_H,    "1")
         self.ForceRefresh()
+        self._refresh_row_labels()
         self._notify_changed()
 
     # ── Контекстное меню ──────────────────────────────────────────────────────
@@ -665,6 +675,15 @@ class CoordinateGrid(gridlib.Grid):
 
         menu.AppendSeparator()
 
+        # ── Переключение активации ───────────────────────────────────────
+        id_toggle_plan = wx.NewIdRef()
+        id_toggle_h    = wx.NewIdRef()
+
+        menu.Append(id_toggle_plan, "Включить/отключить в плане")
+        menu.Append(id_toggle_h,    "Включить/отключить по высоте")
+
+        menu.AppendSeparator()
+
         # ── Swap X↔Y ─────────────────────────────────────────────────────
         id_swap_src = wx.NewIdRef()
         id_swap_dst = wx.NewIdRef()
@@ -687,12 +706,14 @@ class CoordinateGrid(gridlib.Grid):
         # обрабатывает все события до возврата управления.
         _rows = list(rows)   # копия, чтобы не зависеть от внешнего состояния
 
-        self.Bind(wx.EVT_MENU, lambda _: self.delete_selected_rows(_rows),  id=id_del)
+        self.Bind(wx.EVT_MENU, lambda _: self.delete_selected_rows(_rows),   id=id_del)
         self.Bind(wx.EVT_MENU, lambda _: self.duplicate_rows(_rows),         id=id_dup)
         self.Bind(wx.EVT_MENU, lambda _: self.swap_source_xy(_rows),         id=id_swap_src)
         self.Bind(wx.EVT_MENU, lambda _: self.swap_target_xy(_rows),         id=id_swap_dst)
         self.Bind(wx.EVT_MENU, lambda _: self.swap_source_xy(),              id=id_swap_src_all)
         self.Bind(wx.EVT_MENU, lambda _: self.swap_target_xy(),              id=id_swap_dst_all)
+        self.Bind(wx.EVT_MENU, lambda _: self.toggle_plan_enabled(_rows),    id=id_toggle_plan)
+        self.Bind(wx.EVT_MENU, lambda _: self.toggle_height_enabled(_rows),  id=id_toggle_h)
 
         self.PopupMenu(menu)
         menu.Destroy()
@@ -744,6 +765,7 @@ class CoordinateGrid(gridlib.Grid):
             self.MakeCellVisible(insert_pos, 0)
 
         self.ForceRefresh()
+        self._refresh_row_labels()
         self._notify_changed()
 
     def swap_source_xy(self, rows: List[int] = None):
@@ -809,6 +831,7 @@ class CoordinateGrid(gridlib.Grid):
             for col in _READONLY_COLS:
                 self.SetCellAlignment(row, col, wx.ALIGN_RIGHT, wx.ALIGN_CENTRE)
         self._busy = False
+        self._refresh_row_labels()
         self.ForceRefresh()
         self._notify_changed()
 
@@ -1136,3 +1159,29 @@ class CoordinateGrid(gridlib.Grid):
         self.RefreshBlock(top_row, left_col, bottom_row, right_col)
         self.ForceRefresh()
         self.Update()
+
+    def toggle_plan_enabled(self, rows: List[int] = None):
+        """Инвертировать флаг 'в плане' для указанных строк."""
+        if rows is None:
+            rows = self._get_affected_rows()
+        for row in rows:
+            cur = self.GetCellValue(row, _Col.USE_PLAN) == "1"
+            self.SetCellValue(row, _Col.USE_PLAN, "" if cur else "1")
+        self.ForceRefresh()
+        self._notify_changed()
+
+    def toggle_height_enabled(self, rows: List[int] = None):
+        """Инвертировать флаг 'по высоте' для указанных строк."""
+        if rows is None:
+            rows = self._get_affected_rows()
+        for row in rows:
+            cur = self.GetCellValue(row, _Col.USE_H) == "1"
+            self.SetCellValue(row, _Col.USE_H, "" if cur else "1")
+        self.ForceRefresh()
+        self._notify_changed()
+
+    def _refresh_row_labels(self):
+        for row in range(self.GetNumberRows()):
+            name = self.GetCellValue(row, _Col.NAME).strip()
+            self.SetRowLabelValue(row, name if name else str(row + 1))
+        self.SetRowLabelSize(wx.grid.GRID_AUTOSIZE)
