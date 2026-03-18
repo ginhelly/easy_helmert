@@ -215,23 +215,24 @@ class MainFrame(BaseMainFrame):
 
     def on_calculate(self, event):
         geoid_info = None
-        self.coord_grid.clear_autofilled_coordinates()
-        raw_items = self.coord_grid.get_data_with_row_indices()
-        raw = [d for _, d in raw_items]
 
+        # Перед новым расчётом удаляем автодостроенные координаты
+        self.coord_grid.clear_autofilled_coordinates()
+
+        raw_items = self.coord_grid.get_data_with_row_indices()
         valid_items = [
             (row, r)
             for row, r in raw_items
             if self._is_row_usable_for_calculation(row, r)
         ]
-
         valid_raw = [r for _, r in valid_items]
 
-        # Считаем уравнения здесь же, чтобы показать понятную ошибку до вызова ядра
+        # Кол-во уравнений считаем только по активным флагам
         n_eq = sum(
             (2 if r["enabled_plan"] else 0) + (1 if r["enabled_h"] else 0)
             for r in valid_raw
         )
+
         if n_eq < 7:
             wx.MessageBox(
                 "Недостаточно данных.\n\n"
@@ -246,16 +247,21 @@ class MainFrame(BaseMainFrame):
             return
 
         if not getattr(self, "source_crs", None):
-            wx.MessageBox("Задайте исходную систему координат.",
-                        "Нет исходной СК", wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(
+                "Задайте исходную систему координат.",
+                "Нет исходной СК",
+                wx.OK | wx.ICON_WARNING,
+            )
             return
 
         if not getattr(self, "target_crs", None):
-            wx.MessageBox("Задайте целевую систему координат.",
-                        "Нет целевой СК", wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(
+                "Задайте целевую систему координат.",
+                "Нет целевой СК",
+                wx.OK | wx.ICON_WARNING,
+            )
             return
 
-        # Предупреждение о малом числе точек (решение есть, но невязки неинформативны)
         if n_eq < 12:
             if wx.MessageBox(
                 f"Доступно уравнений: {n_eq} (рекомендуется ≥ 12).\n"
@@ -282,73 +288,98 @@ class MainFrame(BaseMainFrame):
                 for r in valid_raw
             ]
         except ValueError as e:
-            wx.MessageBox(f"Ошибка в данных таблицы:\n{e}",
-                        "Ошибка", wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(
+                f"Ошибка в данных таблицы:\n{e}",
+                "Ошибка",
+                wx.OK | wx.ICON_ERROR,
+            )
             return
 
         from core.transformation import calculate_helmert
-        from core.geoid_correction import (
-            calculate_helmert_with_geoid, geoid_needed,
-        )
+        from core.geoid_correction import calculate_helmert_with_geoid, geoid_needed
+
         src_action, tgt_action = self._read_geoid_actions()
         apply_correction = (
             self.m_chk_correction.IsEnabled()
             and self.m_chk_correction.GetValue()
         )
+
         try:
             if geoid_needed(src_action, tgt_action):
                 result, geoid_info = calculate_helmert_with_geoid(
-                    pairs, self.source_crs, self.target_crs,
-                    src_action, tgt_action,
+                    pairs,
+                    self.source_crs,
+                    self.target_crs,
+                    src_action,
+                    tgt_action,
                     apply_correction=apply_correction,
                 )
+
+                # sanity-check от рассинхронизации
+                if len(geoid_info.src) != len(valid_items) or len(geoid_info.tgt) != len(valid_items):
+                    raise RuntimeError(
+                        "Рассинхронизация геоидных данных: "
+                        f"src={len(geoid_info.src)}, tgt={len(geoid_info.tgt)}, valid={len(valid_items)}"
+                    )
+
                 all_geoid_src = [None] * self.coord_grid.GetNumberRows()
                 all_geoid_tgt = [None] * self.coord_grid.GetNumberRows()
 
                 for j, (grid_row, _) in enumerate(valid_items):
                     all_geoid_src[grid_row] = geoid_info.src[j]
                     all_geoid_tgt[grid_row] = geoid_info.tgt[j]
+
                 self.coord_grid.update_geoid_heights(all_geoid_src, all_geoid_tgt)
                 self._last_delta_zeta_mean = geoid_info.delta_zeta_mean
             else:
                 result = calculate_helmert(pairs, self.source_crs, self.target_crs)
                 self.coord_grid.clear_geoid_heights()
                 self._last_delta_zeta_mean = None
+
         except FileNotFoundError as e:
             wx.MessageBox(
                 f"Файл геоида не найден:\n{e}\n\n"
                 "Убедитесь, что egm08_25.gtx или us_nga_egm2008_1.tif "
                 "присутствует в папке resources/",
-                "Геоид не найден", wx.OK | wx.ICON_ERROR,
+                "Геоид не найден",
+                wx.OK | wx.ICON_ERROR,
             )
             return
         except Exception as e:
             raise e
-            wx.MessageBox(f"Ошибка расчёта:\n{e}", "Ошибка", wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(
+                f"Ошибка расчёта:\n{e}",
+                "Ошибка",
+                wx.OK | wx.ICON_ERROR,
+            )
             return
 
         self.calc_result = result
         self.point_pairs = pairs
 
-        # Разворачиваем невязки на все строки таблицы
-        # valid_raw и result.residuals имеют одинаковую длину
+        # Разворот невязок на физические строки таблицы
         all_residuals = [None] * self.coord_grid.GetNumberRows()
+        all_metric = [None] * self.coord_grid.GetNumberRows()
+
+        if len(result.residuals) != len(valid_items) or len(result.residuals_enu) != len(valid_items):
+            wx.MessageBox(
+                "Внутренняя ошибка: рассинхронизация размеров невязок.",
+                "Ошибка",
+                wx.OK | wx.ICON_ERROR,
+            )
+            return
+
         for j, (grid_row, _) in enumerate(valid_items):
             all_residuals[grid_row] = result.residuals[j]
-        
-        # Метрические невязки dE / dN / dU
-        # ENU-невязки уже в result.residuals_enu
-        all_metric = [None] * self.coord_grid.GetNumberRows()
-        for j, (grid_row, _) in enumerate(valid_items):
             all_metric[grid_row] = result.residuals_enu[j]
-        
+
         self.update_results(result)
+
+        # Автодостроение неполных строк с учётом геоида
         filled_cells = self._autofill_missing_coordinates(raw_items, result, geoid_info)
         if filled_cells > 0:
-            # Таблица была автоматически дополнена вычисленными координатами.
-            # Считаем это изменением данных, чтобы при закрытии можно было сохранить.
             self.is_modified = True
-                
+
         threshold = self._get_threshold_m()
 
         self._last_all_residuals = all_residuals
@@ -442,7 +473,7 @@ class MainFrame(BaseMainFrame):
         if dz is not None:
             text += (
                 f"\n\n"
-                f"  Δζ (Балтика − EGM2008) = {dz:+.4f} м  "
+                f"  Δζ (Квазигеоид − EGM2008) = {dz:+.4f} м  "
                 f"({dz * 100:+.2f} см)"
             )
 
@@ -1193,15 +1224,17 @@ class MainFrame(BaseMainFrame):
     def _is_row_usable_for_calculation(self, row: int, r: dict) -> bool:
         """
         Строка пригодна для расчёта, если:
-        - есть координаты в обеих СК по плану
-        - включена хотя бы в плане или по высоте
-        - строка не содержит автодостроенных координат
+        - есть координаты в обеих СК по плану (x1,y1,x2,y2),
+        - строка не содержит автодостроенных координат.
+
+        ВАЖНО:
+        - даже если enabled_plan=False и enabled_h=False, строка всё равно
+        включается в pairs (для вывода невязок XYZ/ENU),
+        но не влияет на решение из-за нулевых весов в ядре.
         """
         has_both_xy = (
             bool(r.get("x1")) and bool(r.get("y1")) and
             bool(r.get("x2")) and bool(r.get("y2"))
         )
-        is_enabled = bool(r.get("enabled_plan")) or bool(r.get("enabled_h"))
         not_computed = not self.coord_grid.row_has_computed_coordinates(row)
-
-        return has_both_xy and is_enabled and not_computed
+        return has_both_xy and not_computed

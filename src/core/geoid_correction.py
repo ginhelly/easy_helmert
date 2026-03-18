@@ -473,36 +473,42 @@ def calculate_helmert_with_geoid(
         and crs_is_wgs84_related(target_crs)
         and n_wgs_src is not None
     ):
+        # 0: Берём только высотные активные точки с обеими высотами
+        valid_mask = np.array([
+            bool(p.enabled_h) and (p.h1 is not None) and (p.h2 is not None)
+            for p in pairs
+        ], dtype=bool)
+
         # Шаг 0–1: геодезические высоты опорных точек
         # Если tgt_action==ADD — даны ортометрические → добавляем N_EGM_wgs
         # Иначе — уже геодезические (эллипсоидальные)
         if tgt_action == GeoidAction.ADD and n_wgs_tgt is not None:
-            h_target_geo = np.array([
-                (p.h2 or 0.0) + float(n_wgs_tgt[i])
+            h_target_calc = np.array([
+                table_to_calc(p.h2, tgt_action, float(n_wgs_tgt[i]))
                 for i, p in enumerate(pairs)
-            ])
+            ], dtype=float)
         else:
-            h_target_geo = np.array([p.h2 or 0.0 for p in pairs])
+            h_target_calc = np.array([p.h2 or 0.0 for p in pairs], dtype=float)
 
-        h_source_cat = np.array([p.h1 or 0.0 for p in pairs])
+        h_source_table = np.array([p.h1 or 0.0 for p in pairs], dtype=float)
 
         # Шаг 2: ζ⁰ = H_target_geodetic − H_source_catalog
         # = расстояние от эллипсоида WGS до Балтийского квазигеоида
-        zeta0 = h_target_geo - h_source_cat
+        zeta0 = h_target_calc - h_source_table
 
         # Шаг 3–4: Δζ = ζ⁰ − N_EGM_wgs
         # = расстояние от EGM2008 до Балтийского квазигеоида
         delta_zeta_arr = zeta0 - n_wgs_src
 
         # Шаг 5: среднее только по точкам с обеими высотами
-        valid_mask = np.array([
-            p.h1 is not None and p.h2 is not None
-            for p in pairs
-        ])
+        delta_zeta_candidates = delta_zeta_arr[valid_mask]
+        delta_zeta_candidates = delta_zeta_candidates[np.isfinite(delta_zeta_candidates)]
         delta_zeta_mean = (
-            float(np.mean(delta_zeta_arr[valid_mask]))
-            if valid_mask.any() else 0.0
+            float(np.mean(delta_zeta_candidates))
+            if delta_zeta_candidates.size > 0 else 0.0
         )
+    else:
+        delta_zeta_mean = None
 
     # ── Применение поправки к исходным высотам ───────────────────────────────
     # Шаг 6: H_corr = H_source + ζ'(EGM на реф. эллипс.) + Δζ_mean

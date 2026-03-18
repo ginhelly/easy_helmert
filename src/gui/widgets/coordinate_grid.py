@@ -211,6 +211,15 @@ class CoordinateGrid(gridlib.Grid):
         self.SetSelectionMode(gridlib.Grid.GridSelectionModes.GridSelectCells)
         self.SetTabBehaviour(gridlib.Grid.TabBehaviour.Tab_Wrap)
 
+        for col in _READONLY_COLS:
+            self.SetColFormatCustom(col, gridlib.GRID_VALUE_STRING)  # опционально, чтобы точно как текст
+            self.SetDefaultCellAlignment(wx.ALIGN_LEFT, wx.ALIGN_CENTRE)  # как было/по умолчанию
+
+        # Выравнивание именно вычисляемых колонок
+        for col in _READONLY_COLS:
+            attr = self.GetOrCreateCellAttr(0, col).Clone() if self.GetNumberRows() > 0 else gridlib.GridCellAttr()
+            attr.SetAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTRE)
+
         self._busy = False
 
         # Первичное распределение ширин после встраивания в layout
@@ -233,6 +242,7 @@ class CoordinateGrid(gridlib.Grid):
         # Цвет фона для невязок
         for col in _READONLY_COLS:
             self.SetCellBackgroundColour(row, col, _CLR_NA)
+            self.SetCellAlignment(row, col, wx.ALIGN_RIGHT, wx.ALIGN_CENTRE)
 
     # ── Авторастяжка столбцов ─────────────────────────────────────────────────
 
@@ -795,6 +805,9 @@ class CoordinateGrid(gridlib.Grid):
             self.SetCellValue(row, _Col.Y2,   str(d.get("y2",   "")))
             self.SetCellValue(row, _Col.H2,   str(d.get("h2",   "")))
 
+        for row in range(self.GetNumberRows()):
+            for col in _READONLY_COLS:
+                self.SetCellAlignment(row, col, wx.ALIGN_RIGHT, wx.ALIGN_CENTRE)
         self._busy = False
         self.ForceRefresh()
         self._notify_changed()
@@ -867,7 +880,7 @@ class CoordinateGrid(gridlib.Grid):
                     clr = _CLR_BAD if bad else _CLR_OK
                     self.SetCellBackgroundColour(row, col, clr)
 
-        self.ForceRefresh()
+        self._refresh_computed_block()
 
     def update_metric_residuals(
         self,
@@ -907,7 +920,7 @@ class CoordinateGrid(gridlib.Grid):
                     self.SetCellValue(row, col, f"{val:+.4f}")
                     self.SetCellBackgroundColour(row, col, _CLR_BAD if bad else _CLR_OK)
 
-        self.ForceRefresh()
+        self._refresh_computed_block()
 
     def clear_residuals(self):
         """Сбросить все невязки (например, при изменении входных данных)."""
@@ -966,7 +979,7 @@ class CoordinateGrid(gridlib.Grid):
                     h_corr, n_geoid = info
                     self.SetCellValue(row, col, f"{h_corr:.4f} (ζ={n_geoid:+.4f})")
                     self.SetCellBackgroundColour(row, col, _CLR_GEOID)
-        self.ForceRefresh()
+        self._refresh_computed_block()
 
     def clear_geoid_heights(self):
         """Сбросить столбцы геоида (вызывается при изменении входных данных)."""
@@ -975,7 +988,7 @@ class CoordinateGrid(gridlib.Grid):
             for row in range(n):
                 self.SetCellValue(row, col, "")
                 self.SetCellBackgroundColour(row, col, _CLR_NA)
-        self.ForceRefresh()
+        self._refresh_computed_block()
     
     def _mark_computed_cell(self, row: int, col: int):
         """Помечает ячейку как автоматически вычисленную."""
@@ -1089,7 +1102,7 @@ class CoordinateGrid(gridlib.Grid):
         for row, (h, n) in tgt_updates.items():
             self.SetCellValue(row, _Col.H2_CORR, f"{h:.4f} (ζ {n:+.4f})")
             self.SetCellBackgroundColour(row, _Col.H2_CORR, _CLR_GEOID)
-        self.ForceRefresh()
+        self._refresh_computed_block()
 
     def clear_autofilled_coordinates(self):
         """
@@ -1107,3 +1120,19 @@ class CoordinateGrid(gridlib.Grid):
         finally:
             self._busy = False
         self.ForceRefresh()
+    
+    def _refresh_computed_block(self):
+        """
+        Жёсткая перерисовка блока вычисляемых столбцов.
+        Убирает артефакты частичной заливки у крайних ячеек.
+        """
+        if self.GetNumberRows() <= 0:
+            return
+        top_row = 0
+        bottom_row = self.GetNumberRows() - 1
+        left_col = _Col.H1_CORR
+        right_col = _Col.DU
+
+        self.RefreshBlock(top_row, left_col, bottom_row, right_col)
+        self.ForceRefresh()
+        self.Update()

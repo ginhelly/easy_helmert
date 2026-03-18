@@ -137,28 +137,6 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerTableHeader.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
-        bSizer27 = wx.BoxSizer( wx.HORIZONTAL )
-
-        self.m_staticText21 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Подсв. красным невязки >", wx.DefaultPosition, wx.DefaultSize, 0 )
-        self.m_staticText21.Wrap( -1 )
-
-        bSizer27.Add( self.m_staticText21, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
-
-        self.m_spin_bad_threshold = wx.SpinCtrlDouble( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS|wx.TE_PROCESS_ENTER, 0, 100, 0.1, 1 )
-        self.m_spin_bad_threshold.SetDigits( 2 )
-        bSizer27.Add( self.m_spin_bad_threshold, 0, wx.ALL, 5 )
-
-        m_choice_bad_unitsChoices = [ u"СКО", u"метров" ]
-        self.m_choice_bad_units = wx.Choice( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_bad_unitsChoices, 0 )
-        self.m_choice_bad_units.SetSelection( 1 )
-        bSizer27.Add( self.m_choice_bad_units, 1, wx.ALL, 5 )
-
-
-        bSizerTableHeader.Add( bSizer27, 0, wx.EXPAND, 5 )
-
-        self.m_staticline2 = wx.StaticLine( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_VERTICAL )
-        bSizerTableHeader.Add( self.m_staticline2, 0, wx.EXPAND |wx.ALL, 5 )
-
         self.m_btn_add_row = wx.Button( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
 
         self.m_btn_add_row.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_PLUS,  ) )
@@ -189,6 +167,28 @@ class BaseMainFrame ( wx.Frame ):
         self.m_btn_swap_dst.SetToolTip( u"Поменять местами X и Y у точек в ЦЕЛЕВОЙ системе" )
 
         bSizerTableHeader.Add( self.m_btn_swap_dst, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
+
+        self.m_staticline2 = wx.StaticLine( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_VERTICAL )
+        bSizerTableHeader.Add( self.m_staticline2, 0, wx.EXPAND |wx.ALL, 5 )
+
+        bSizer27 = wx.BoxSizer( wx.HORIZONTAL )
+
+        self.m_staticText21 = wx.StaticText( self.m_panel_input, wx.ID_ANY, u"Подсв. красным невязки >", wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_staticText21.Wrap( -1 )
+
+        bSizer27.Add( self.m_staticText21, 0, wx.ALIGN_CENTER|wx.ALL, 5 )
+
+        self.m_spin_bad_threshold = wx.SpinCtrlDouble( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, wx.SP_ARROW_KEYS|wx.TE_PROCESS_ENTER, 0, 100, 0.1, 1 )
+        self.m_spin_bad_threshold.SetDigits( 2 )
+        bSizer27.Add( self.m_spin_bad_threshold, 0, wx.ALL, 5 )
+
+        m_choice_bad_unitsChoices = [ u"СКО", u"метров" ]
+        self.m_choice_bad_units = wx.Choice( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, m_choice_bad_unitsChoices, 0 )
+        self.m_choice_bad_units.SetSelection( 1 )
+        bSizer27.Add( self.m_choice_bad_units, 1, wx.ALL, 5 )
+
+
+        bSizerTableHeader.Add( bSizer27, 0, wx.EXPAND, 5 )
 
 
         bSizerInput.Add( bSizerTableHeader, 0, wx.EXPAND, 5 )
