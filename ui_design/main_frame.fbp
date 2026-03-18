@@ -84,7 +84,7 @@
         <property name="window_name"></property>
         <property name="window_style"></property>
       </object>
-      <object class="wxMenuBar" expanded="false">
+      <object class="wxMenuBar" expanded="true">
         <property name="bg"></property>
         <property name="context_help"></property>
         <property name="context_menu">1</property>
@@ -106,7 +106,7 @@
         <property name="window_extra_style"></property>
         <property name="window_name"></property>
         <property name="window_style"></property>
-        <object class="wxMenu" expanded="false">
+        <object class="wxMenu" expanded="true">
           <property name="label">Файл</property>
           <property name="name">m_menu1</property>
           <property name="permission">protected</property>
@@ -177,6 +177,19 @@
             <property name="name">m_menuItem_export_calibration</property>
             <property name="permission">none</property>
             <property name="shortcut"></property>
+            <property name="unchecked_bitmap"></property>
+          </object>
+          <object class="wxMenuItem" expanded="true">
+            <property name="bitmap"></property>
+            <property name="checked">0</property>
+            <property name="enabled">1</property>
+            <property name="help"></property>
+            <property name="id">wxID_ANY</property>
+            <property name="kind">wxITEM_NORMAL</property>
+            <property name="label">Показать точки на карте...</property>
+            <property name="name">m_menuItem_show_on_map</property>
+            <property name="permission">none</property>
+            <property name="shortcut">CTRL+M</property>
             <property name="unchecked_bitmap"></property>
           </object>
           <object class="separator" expanded="false">
@@ -470,6 +483,20 @@
           <property name="name">m_tool_export_calibration</property>
           <property name="permission">protected</property>
           <property name="statusbar">Сохранить таблицу как калибровку в формате контроллера...</property>
+          <property name="tooltip"></property>
+        </object>
+        <object class="toolSeparator" expanded="true">
+          <property name="permission">protected</property>
+        </object>
+        <object class="tool" expanded="true">
+          <property name="bitmap">Load From Art Provider; wxART_FLOPPY; </property>
+          <property name="context_menu">0</property>
+          <property name="id">wxID_ANY</property>
+          <property name="kind">wxITEM_NORMAL</property>
+          <property name="label">Показать на карте</property>
+          <property name="name">m_tool_show_on_map</property>
+          <property name="permission">protected</property>
+          <property name="statusbar">Показать точки на карте...</property>
           <property name="tooltip"></property>
         </object>
       </object>

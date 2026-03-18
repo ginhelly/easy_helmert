@@ -4,5 +4,5 @@
   <object class="wxBitmap" name="copy_wkt1_icon">copy_wkt1.png</object>
   <object class="wxBitmap" name="copy_wkt2_icon">copy_wkt2.png</object>
   <object class="wxBitmap" name="copy_proj4_icon">copy_proj4.png</object>
-  <object class="wxBitmap" name="calculate_heights_icon">calculate_height.png</object>
+  <object class="wxBitmap" name="show_on_map_icon">map.png</object>
 </resource>

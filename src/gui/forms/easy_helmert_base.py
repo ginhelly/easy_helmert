@@ -46,6 +46,9 @@ class BaseMainFrame ( wx.Frame ):
         self.m_menuItem_export_calibration = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Сохранить таблицу как калибровку...", wx.EmptyString, wx.ITEM_NORMAL )
         self.m_menu1.Append( self.m_menuItem_export_calibration )
 
+        self.m_menuItem_show_on_map = wx.MenuItem( self.m_menu1, wx.ID_ANY, u"Показать точки на карте..."+ u"\t" + u"CTRL+M", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu1.Append( self.m_menuItem_show_on_map )
+
         self.m_menu1.AppendSeparator()
 
         self.m_exit_item = wx.MenuItem( self.m_menu1, wx.ID_EXIT, u"Выход"+ u"\t" + u"CTRL+Q", wx.EmptyString, wx.ITEM_NORMAL )
@@ -112,6 +115,10 @@ class BaseMainFrame ( wx.Frame ):
         self.m_tool_save_table = self.m_toolbar.AddTool( wx.ID_ANY, u"Сохранить таблицу", wx.ArtProvider.GetBitmap( wx.ART_FILE_SAVE,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Сохранить таблицу с входными данными в текстовом формате...", None )
 
         self.m_tool_export_calibration = self.m_toolbar.AddTool( wx.ID_ANY, u"Экспорт калибровки", wx.ArtProvider.GetBitmap( wx.ART_FLOPPY,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Сохранить таблицу как калибровку в формате контроллера...", None )
+
+        self.m_toolbar.AddSeparator()
+
+        self.m_tool_show_on_map = self.m_toolbar.AddTool( wx.ID_ANY, u"Показать на карте", wx.ArtProvider.GetBitmap( wx.ART_FLOPPY,  ), wx.NullBitmap, wx.ITEM_NORMAL, wx.EmptyString, u"Показать точки на карте...", None )
 
         self.m_toolbar.Realize()
 

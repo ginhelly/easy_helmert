@@ -169,6 +169,11 @@ class MainFrame(BaseMainFrame):
             wx.EVT_RADIOBOX,
             lambda e: (self._update_geoid_controls(), e.Skip()),
         )
+        
+        self.Bind(wx.EVT_MENU, self.show_on_map, self.m_menuItem_show_on_map)
+        self.Bind(wx.EVT_TOOL, self.show_on_map, self.m_tool_show_on_map)
+        self.Bind(wx.EVT_UPDATE_UI, self._on_update_show_on_map_ui, self.m_menuItem_show_on_map)
+        self.Bind(wx.EVT_UPDATE_UI, self._on_update_show_on_map_ui, self.m_tool_show_on_map)
 
     def _on_update_export_ui(self, event):
         event.Enable(self.calc_result is not None)
@@ -585,7 +590,7 @@ class MainFrame(BaseMainFrame):
             "Копировать WKT1": "copy_wkt1_icon",
             "Копировать WKT2": "copy_wkt2_icon",
             "Копировать Proj4": "copy_proj4_icon",
-            "Пересчитать высоты относительно геоида": "calculate_heights_icon"
+            "Показать на карте": "show_on_map_icon"
         }
         for pos in range(self.m_toolbar.GetToolsCount()):
             tool = self.m_toolbar.GetToolByPos(pos)
@@ -1257,3 +1262,32 @@ class MainFrame(BaseMainFrame):
         )
         not_computed = not self.coord_grid.row_has_computed_coordinates(row)
         return has_both_xy and not_computed
+    
+    def show_on_map(self, event=None):
+
+        if self.calc_result is None:
+            wx.MessageBox("Сначала выполните расчёт.", "Нет результата", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        from gui.dialogs.map_dialog import MapDialog
+        from gui.utils.map_points_builder import can_show_map, build_points_for_map
+
+        # Здесь вы формируете списки уже в WGS84 lon/lat
+        raw_items = self.coord_grid.get_data_with_row_indices()
+        src_points, tgt_points = build_points_for_map(
+            raw_items, self.source_crs, self.target_crs, self.calc_result
+        )
+
+        dlg = MapDialog(self)
+        dlg.set_points(src_points, tgt_points, "Точки калибровки")
+        dlg.ShowModal()
+        dlg.Destroy()
+
+    def _on_update_show_on_map_ui(self, event):
+        from core.geoid_correction import crs_is_wgs84_related
+
+        has_result = self.calc_result is not None
+        src_ok = getattr(self, "source_crs", None) is not None and crs_is_wgs84_related(self.source_crs)
+        tgt_ok = getattr(self, "target_crs", None) is not None and crs_is_wgs84_related(self.target_crs)
+
+        event.Enable(has_result and (src_ok or tgt_ok))
