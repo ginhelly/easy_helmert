@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import List
 
+import csv
+from io import StringIO
+
 from .base import BaseCalibrationHandler, CalibrationPoint
 
 
@@ -12,6 +15,36 @@ from .base import BaseCalibrationHandler, CalibrationPoint
 # 7:use_h 8:use_v 9:code 10:desc 11:?
 _FIELD_COUNT = 12
 
+_FALSE = {"0", "false", "no", "n", ""}
+_TRUE  = {"1", "true", "yes", "y"}
+
+def _norm(s: str) -> str:
+    return (s or "").strip().lower()
+
+def _is_bool_token(s: str) -> bool:
+    v = _norm(s)
+    return v in _FALSE or v in _TRUE
+
+def _to_bool(s: str, default: bool = True) -> bool:
+    v = _norm(s)
+    if v in _FALSE:
+        return False
+    if v in _TRUE:
+        return True
+    return default
+
+def _is_description_candidate(s: str) -> bool:
+    v = (s or "").strip()
+    if not v:
+        return False
+    if _is_bool_token(v):
+        return False
+    # не брать очевидные числовые коды
+    try:
+        float(v.replace(",", "."))
+        return False
+    except Exception:
+        return True
 
 class CotImporter(BaseCalibrationHandler):
     """
@@ -54,32 +87,46 @@ class CotImporter(BaseCalibrationHandler):
 
     def parse(self, content: str) -> List[CalibrationPoint]:
         points: List[CalibrationPoint] = []
-        for lineno, line in enumerate(content.splitlines(), 1):
-            line = line.strip()
-            if not line or line.startswith("#"):
+
+        reader = csv.reader(StringIO(content))
+        for lineno, fields in enumerate(reader, 1):
+            if not fields:
                 continue
-            fields = line.split(",")
+
+            # trim + pad
+            fields = [f.strip() for f in fields]
             if len(fields) < 9:
                 continue
-            # Дополняем до 12 если строка короче
             while len(fields) < _FIELD_COUNT:
                 fields.append("")
 
-            name = fields[10].strip() or fields[0].strip()
+            # Определяем, где флаги use_h/use_v: (7,8) или (9,10)
+            if _is_bool_token(fields[9]) and _is_bool_token(fields[10]):
+                idx_use_h, idx_use_v = 9, 10
+            else:
+                idx_use_h, idx_use_v = 7, 8
+
+            enabled_plan = _to_bool(fields[idx_use_h], default=True)
+            enabled_h    = _to_bool(fields[idx_use_v], default=True)
+
+            # Имя: берём description только если это реально описание
+            desc = fields[10]
+            name = desc if _is_description_candidate(desc) else fields[0]
             if not name:
                 name = f"Point {lineno}"
 
             points.append(CalibrationPoint(
                 name         = name,
-                y1           = fields[1].strip(),
-                x1           = fields[2].strip(),
-                h1           = fields[3].strip(),
-                y2           = fields[4].strip(),
-                x2           = fields[5].strip(),
-                h2           = fields[6].strip(),
-                enabled_plan = fields[7].strip() not in ("0", "false", "no", ""),
-                enabled_h    = fields[8].strip() not in ("0", "false", "no", ""),
+                y1           = fields[1],  # Local_North
+                x1           = fields[2],  # Local_East
+                h1           = fields[3],  # Local_H
+                y2           = fields[4],  # Lat
+                x2           = fields[5],  # Lon
+                h2           = fields[6],  # Ellipsoid_H
+                enabled_plan = enabled_plan,
+                enabled_h    = enabled_h,
             ))
+
         return points
 
     # ── Экспорт ──────────────────────────────────────────────────────────────

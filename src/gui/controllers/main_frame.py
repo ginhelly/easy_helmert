@@ -738,46 +738,65 @@ class MainFrame(BaseMainFrame):
 
         current: List[dict] = self.coord_grid.get_data()
 
-        name_idx: Dict[str, List[int]] = {}
+        existing_idx: Dict[str, List[int]] = {}
         for i, row in enumerate(current):
             name = row.get("name", "").strip()
             if name:
-                name_idx.setdefault(name, []).append(i)
+                existing_idx.setdefault(name, []).append(i)
+
+        # Новые строки, которые ещё не добавлены в current
+        new_rows: List[dict] = []
+        new_by_name: Dict[str, int] = {}  # name -> index in new_rows
 
         n_added, n_updated = 0, 0
-        new_rows: List[dict] = []
 
         for imp in imported:
             imp_name = imp.get("name", "").strip()
             if not imp_name:
                 continue
 
-            if imp_name in name_idx:
-                for idx in name_idx[imp_name]:
-                    # Обновляем координатные поля (только непустые)
+            # 1) Обновление существующих строк
+            if imp_name in existing_idx:
+                for idx in existing_idx[imp_name]:
                     for key in _COORD_KEYS:
                         val = imp.get(key, "")
                         if val:
                             current[idx][key] = val
-                    # Обновляем флаги включения (только если явно заданы в импорте)
                     for flag in _FLAG_KEYS:
                         if flag in imp:
                             current[idx][flag] = imp[flag]
                 n_updated += 1
-            else:
-                blank: dict = {
-                    "enabled_plan": imp.get("enabled_plan", True),
-                    "enabled_h":    imp.get("enabled_h",    True),
-                    "name": imp_name,
-                    "x1": "", "y1": "", "h1": "",
-                    "x2": "", "y2": "", "h2": "",
-                }
+                continue
+
+            # 2) Обновление уже созданной "новой" строки с тем же именем
+            if imp_name in new_by_name:
+                nr = new_rows[new_by_name[imp_name]]
                 for key in _COORD_KEYS:
-                    if imp.get(key):
-                        blank[key] = imp[key]
-                name_idx[imp_name] = [len(current) + len(new_rows)]
-                new_rows.append(blank)
-                n_added += 1
+                    val = imp.get(key, "")
+                    if val:
+                        nr[key] = val
+                for flag in _FLAG_KEYS:
+                    if flag in imp:
+                        nr[flag] = imp[flag]
+                n_updated += 1
+                continue
+
+            # 3) Создание новой строки
+            blank = {
+                "enabled_plan": imp.get("enabled_plan", True),
+                "enabled_h":    imp.get("enabled_h", True),
+                "name": imp_name,
+                "x1": "", "y1": "", "h1": "",
+                "x2": "", "y2": "", "h2": "",
+            }
+            for key in _COORD_KEYS:
+                val = imp.get(key, "")
+                if val:
+                    blank[key] = val
+
+            new_by_name[imp_name] = len(new_rows)
+            new_rows.append(blank)
+            n_added += 1
 
         self.coord_grid.set_data(current + new_rows)
         return n_added, n_updated
