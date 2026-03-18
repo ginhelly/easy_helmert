@@ -133,7 +133,7 @@ class MainFrame(BaseMainFrame):
         
         self.m_spin_bad_threshold.Bind(wx.EVT_SPINCTRLDOUBLE, self._on_threshold_changed)
         self.m_choice_bad_units.Bind(wx.EVT_CHOICE, self._on_threshold_changed)
-        self.m_spin_bad_threshold.Bind(wx.EVT_TEXT_ENTER, self._on_threshold_changed)
+        self.m_spin_bad_threshold.Bind(wx.EVT_TEXT_ENTER, self._on_threshold_enter)
 
             # ── Экспорт результата (меню) ────────────────────────────────────────
         self.Bind(wx.EVT_MENU, lambda e: self._save_crs_to_file("wkt1"),        self.m_menuItem_save_wkt1)
@@ -844,6 +844,27 @@ class MainFrame(BaseMainFrame):
                 self._last_all_metric, threshold=threshold
             )
         event.Skip()
+    
+    def _on_threshold_enter(self, event):
+        wx.CallAfter(self._apply_threshold_from_spin_text)
+        event.Skip()
+
+    def _apply_threshold_from_spin_text(self):
+        # 1) коммитим текст в value
+        try:
+            txt = self.m_spin_bad_threshold.GetTextValue()  # важно
+            if txt:
+                self.m_spin_bad_threshold.SetValue(float(txt.replace(",", ".")))
+        except Exception:
+            pass
+
+        # 2) перерисовываем сразу
+        if self.calc_result is not None:
+            threshold = self._get_threshold_m()
+            if hasattr(self, "_last_all_residuals"):
+                self.coord_grid.update_residuals(self._last_all_residuals, threshold=threshold)
+            if hasattr(self, "_last_all_metric"):
+                self.coord_grid.update_metric_residuals(self._last_all_metric, threshold=threshold)
 
     def _bind_statusbar_hint(self, ctrl: wx.Window, text: str):
         """
