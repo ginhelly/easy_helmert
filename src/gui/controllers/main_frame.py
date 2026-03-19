@@ -114,7 +114,11 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_BUTTON, self.on_del_row,    self.m_btn_del_row)
         self.Bind(wx.EVT_BUTTON, self.on_swap_src,   self.m_btn_swap_src)
         self.Bind(wx.EVT_BUTTON, self.on_swap_dst,   self.m_btn_swap_dst)
+        self.Bind(wx.EVT_MENU, self.on_swap_src,   self.m_menuItem_swapxy_src)
+        self.Bind(wx.EVT_MENU, self.on_swap_dst,   self.m_menuItem_swapxy_tgt)
         self.Bind(wx.EVT_BUTTON, self.on_calculate,  self.m_btn_calc)
+
+        self.Bind(wx.EVT_MENU, self.on_parse_degrees, self.m_menuItem_parse_degrees)
 
         # Кнопки установки систем координат
         self.Bind(wx.EVT_BUTTON, self.on_select_source_crs,    self.m_btn_set_src_crs)
@@ -1291,3 +1295,47 @@ class MainFrame(BaseMainFrame):
         tgt_ok = getattr(self, "target_crs", None) is not None and crs_is_wgs84_related(self.target_crs)
 
         event.Enable(has_result and (src_ok or tgt_ok))
+    
+    def on_parse_degrees(self, event):
+        from gui.dialogs.parse_degrees_dialog import ParseDegreesDialog
+
+        # Собираем данные для превью (только строки, где есть хоть что-то)
+        rows_payload = []
+        for row in range(self.coord_grid.GetNumberRows()):
+            y1 = self.coord_grid.GetCellValue(row, 4).strip()  # _Col.Y1
+            x1 = self.coord_grid.GetCellValue(row, 3).strip()  # _Col.X1
+            y2 = self.coord_grid.GetCellValue(row, 8).strip()  # _Col.Y2
+            x2 = self.coord_grid.GetCellValue(row, 7).strip()  # _Col.X2
+            if not (y1 or x1 or y2 or x2):
+                continue
+            rows_payload.append({
+                "grid_row": row,
+                "name": self.coord_grid.GetCellValue(row, 2).strip(),  # _Col.NAME
+                "y1": y1, "x1": x1, "y2": y2, "x2": x2,
+            })
+
+        if not rows_payload:
+            wx.MessageBox("Нет данных для парсинга.", "Информация", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        with ParseDegreesDialog(self, rows_payload) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            updates = dlg.get_updates()
+
+        if not updates:
+            return
+
+        key_to_col = {"y1": 4, "x1": 3, "y2": 8, "x2": 7}
+        self.coord_grid._busy = True
+        try:
+            for (grid_row, key), new_val in updates.items():
+                self.coord_grid.SetCellValue(grid_row, key_to_col[key], new_val)
+        finally:
+            self.coord_grid._busy = False
+
+        self.coord_grid.ForceRefresh()
+
+        self.is_modified = True
+        self._set_result_text("")
+        self.coord_grid.clear_residuals()

@@ -57,6 +57,20 @@ class BaseMainFrame ( wx.Frame ):
 
         self.m_menubar1.Append( self.m_menu1, u"Файл" )
 
+        self.m_menu4 = wx.Menu()
+        self.m_menuItem_swapxy_src = wx.MenuItem( self.m_menu4, wx.ID_ANY, u"Переставить север/восток у исходных точек", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu4.Append( self.m_menuItem_swapxy_src )
+
+        self.m_menuItem_swapxy_tgt = wx.MenuItem( self.m_menu4, wx.ID_ANY, u"Переставить север/восток у опорных точек", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu4.Append( self.m_menuItem_swapxy_tgt )
+
+        self.m_menu4.AppendSeparator()
+
+        self.m_menuItem_parse_degrees = wx.MenuItem( self.m_menu4, wx.ID_ANY, u"Парсинг градусных координат", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menu4.Append( self.m_menuItem_parse_degrees )
+
+        self.m_menubar1.Append( self.m_menu4, u"Таблица" )
+
         self.m_menu3 = wx.Menu()
         self.m_menuItem_save_wkt1 = wx.MenuItem( self.m_menu3, wx.ID_ANY, u"Сохранить как WKT...", wx.EmptyString, wx.ITEM_NORMAL )
         self.m_menu3.Append( self.m_menuItem_save_wkt1 )

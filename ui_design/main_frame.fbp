@@ -211,6 +211,54 @@
             <event name="OnMenuSelection">on_exit</event>
           </object>
         </object>
+        <object class="wxMenu" expanded="true">
+          <property name="label">Таблица</property>
+          <property name="name">m_menu4</property>
+          <property name="permission">protected</property>
+          <object class="wxMenuItem" expanded="true">
+            <property name="bitmap"></property>
+            <property name="checked">0</property>
+            <property name="enabled">1</property>
+            <property name="help"></property>
+            <property name="id">wxID_ANY</property>
+            <property name="kind">wxITEM_NORMAL</property>
+            <property name="label">Переставить север/восток у исходных точек</property>
+            <property name="name">m_menuItem_swapxy_src</property>
+            <property name="permission">none</property>
+            <property name="shortcut"></property>
+            <property name="unchecked_bitmap"></property>
+          </object>
+          <object class="wxMenuItem" expanded="true">
+            <property name="bitmap"></property>
+            <property name="checked">0</property>
+            <property name="enabled">1</property>
+            <property name="help"></property>
+            <property name="id">wxID_ANY</property>
+            <property name="kind">wxITEM_NORMAL</property>
+            <property name="label">Переставить север/восток у опорных точек</property>
+            <property name="name">m_menuItem_swapxy_tgt</property>
+            <property name="permission">none</property>
+            <property name="shortcut"></property>
+            <property name="unchecked_bitmap"></property>
+          </object>
+          <object class="separator" expanded="true">
+            <property name="name">m_separator4</property>
+            <property name="permission">none</property>
+          </object>
+          <object class="wxMenuItem" expanded="true">
+            <property name="bitmap"></property>
+            <property name="checked">0</property>
+            <property name="enabled">1</property>
+            <property name="help"></property>
+            <property name="id">wxID_ANY</property>
+            <property name="kind">wxITEM_NORMAL</property>
+            <property name="label">Парсинг градусных координат</property>
+            <property name="name">m_menuItem_parse_degrees</property>
+            <property name="permission">none</property>
+            <property name="shortcut"></property>
+            <property name="unchecked_bitmap"></property>
+          </object>
+        </object>
         <object class="wxMenu" expanded="false">
           <property name="label">Вычисленные параметры</property>
           <property name="name">m_menu3</property>
@@ -1451,7 +1499,7 @@
                               <property name="window_extra_style"></property>
                               <property name="window_name"></property>
                               <property name="window_style">wxBORDER_NONE|wxHSCROLL|wxVSCROLL</property>
-                              <object class="wxBoxSizer" expanded="false">
+                              <object class="wxBoxSizer" expanded="true">
                                 <property name="minimum_size">-1,-1</property>
                                 <property name="name">bSizerGridSettings</property>
                                 <property name="orient">wxVERTICAL</property>
