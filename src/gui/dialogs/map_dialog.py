@@ -11,13 +11,20 @@ class MapDialog(wx.Dialog):
     def __init__(self, parent, title: str = "Точки на карте", size=(980, 700)):
         super().__init__(parent, title=title, size=size,
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        
+        if webview.WebView.IsBackendAvailable(webview.WebViewBackendEdge):
+            self.web = webview.WebView.New(self, backend=webview.WebViewBackendEdge)
+        else:
+            from gui.dialogs.webview2_help_dialog import WebView2HelpDialog
+            with WebView2HelpDialog(self) as dlg:
+                dlg.ShowModal()
+            self.web = webview.WebView.New(self)  # fallback
 
         self._src_points = []
         self._tgt_points = []
         self._title = title
         
         s = wx.BoxSizer(wx.VERTICAL)
-        self.web = webview.WebView.New(self)
         s.Add(self.web, 1, wx.EXPAND | wx.ALL, 6)
 
         btns = wx.BoxSizer(wx.HORIZONTAL)
