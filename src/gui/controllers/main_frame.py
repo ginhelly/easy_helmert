@@ -398,6 +398,9 @@ class MainFrame(BaseMainFrame):
         self.coord_grid.update_metric_residuals(all_metric, threshold=threshold)
     
     def _read_display_settings(self) -> DisplaySettings:
+        src_note, tgt_note, warn_note = self._build_geoid_notes()
+        rms_active = self._rms_enu_active_from_grid()
+        sigma0_active = self._sigma0_enu_active_from_grid()
         return DisplaySettings(
             method        = HelmertMethod(self.m_rb_method.GetSelection()),
             direction     = HelmertDirection(self.m_rb_direction.GetSelection()),
@@ -406,6 +409,11 @@ class MainFrame(BaseMainFrame):
             source_name   = self._src_crs_name(),
             target_name   = self._tgt_crs_name(),
             rms_metric_m  = self._rms_from_grid(),
+            rms_metric_active_m = rms_active if rms_active is not None else 0.0,
+            rms_metric_sigma0_m = sigma0_active if sigma0_active is not None else 0.0,
+            geoid_src_note = src_note,
+            geoid_tgt_note = tgt_note,
+            geoid_warn_note = warn_note,
         )
 
     def _update_geoid_controls(self):
@@ -1339,3 +1347,59 @@ class MainFrame(BaseMainFrame):
         self.is_modified = True
         self._set_result_text("")
         self.coord_grid.clear_residuals()
+
+    def _build_geoid_notes(self) -> tuple[str, str, str]:
+        from core.geoid_correction import GeoidAction, geoid_controls_active
+
+        src = getattr(self, "source_crs", None)
+        tgt = getattr(self, "target_crs", None)
+
+        if not geoid_controls_active(src, tgt):
+            return (
+                "Исходные высоты: учёт геоида недоступен (СК не связаны с WGS-84)",
+                "Опорные высоты: учёт геоида недоступен (СК не связаны с WGS-84)",
+                "",
+            )
+
+        src_action = GeoidAction(self.m_rb_src_action.GetSelection())
+        tgt_action = GeoidAction(self.m_rb_tgt_action.GetSelection())
+
+        def note(prefix: str, action: GeoidAction) -> str:
+            if action == GeoidAction.NOTHING:
+                return f"{prefix} высоты в таблице интерпретировались как геодезические"
+            if action == GeoidAction.ADD:
+                return (
+                    f"{prefix} высоты в таблице интерпретировались как ортометрические "
+                    f"и для вычисления параметров перехода приведены к геодезическим"
+                )
+            return (
+                f"{prefix} высоты в таблице интерпретировались как значения, "
+                f"из которых вычиталась высота геоида (режим нестандартный)"
+            )
+
+        src_note = note("Исходные", src_action)
+        tgt_note = note("Опорные", tgt_action)
+
+        warns = []
+        if src_action == GeoidAction.ADD:
+            warns.append(
+                "\nВНИМАНИЕ: без коррекции на высоту геоида данные параметры будут давать ГЕОДЕЗИЧЕСКИЕ высоты"
+            )
+        if src_action == GeoidAction.SUBTRACT or tgt_action == GeoidAction.SUBTRACT:
+            warns.append(
+                "\nВНИМАНИЕ: режим «Вычесть высоту геоида» методически спорный, используйте с осторожностью"
+            )
+
+        return src_note, tgt_note, " ".join(warns)
+    
+    def _rms_enu_active_from_grid(self) -> Optional[float]:
+        if self.calc_result is None or not self.calc_result.residuals_enu:
+            return None
+        from core.transformation import compute_rms_enu_active
+        return compute_rms_enu_active(self.point_pairs, self.calc_result.residuals_enu)
+    
+    def _sigma0_enu_active_from_grid(self) -> Optional[float]:
+        if self.calc_result is None or not self.calc_result.residuals_enu:
+            return None
+        from core.transformation import compute_sigma0_enu_active
+        return compute_sigma0_enu_active(self.point_pairs, self.calc_result.residuals_enu)

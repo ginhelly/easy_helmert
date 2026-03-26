@@ -399,7 +399,6 @@ class BaseMainFrame ( wx.Frame ):
         self.m_txt_result = wx.TextCtrl( self.m_panel10, wx.ID_ANY, u"Результат расчёта...", wx.DefaultPosition, wx.DefaultSize, wx.HSCROLL|wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_RICH2|wx.BORDER_THEME )
         self.m_txt_result.SetFont( wx.Font( 10, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
         self.m_txt_result.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_INACTIVEBORDER ) )
-        self.m_txt_result.SetMaxSize( wx.Size( -1,250 ) )
 
         bSizer29.Add( self.m_txt_result, 1, wx.ALL|wx.EXPAND, 5 )
 

@@ -296,3 +296,64 @@ def calculate_helmert(
         residuals     = _residuals(pairs, src_ecef, tgt_ecef, raw),
         residuals_enu = enu,
     )
+
+def compute_rms_enu_active(
+    pairs: List[PointPair],
+    residuals_enu: List[Tuple[float, float, float]],
+) -> float | None:
+    """
+    СКО ENU только по активным уравнениям:
+      - enabled_plan=True  -> dE, dN
+      - enabled_h=True     -> dU
+      - полностью выключенная точка не даёт вклад
+    """
+    import numpy as np
+
+    if not pairs or not residuals_enu:
+        return None
+    if len(pairs) != len(residuals_enu):
+        return None
+
+    vals = []
+    for p, (de, dn, du) in zip(pairs, residuals_enu):
+        if p.enabled_plan:
+            vals.extend([float(de), float(dn)])
+        if p.enabled_h:
+            vals.append(float(du))
+
+    if not vals:
+        return None
+
+    arr = np.asarray(vals, dtype=float)
+    return float(np.sqrt(np.mean(arr ** 2)))
+
+def compute_sigma0_enu_active(
+    pairs: List[PointPair],
+    residuals_enu: List[Tuple[float, float, float]],
+    n_unknowns: int = 7,
+) -> float | None:
+    """
+    Апостериорная СКО единицы веса по активным ENU-компонентам:
+        m0 = sqrt(sum(v^2) / (n_active - n_unknowns))
+
+    При равных весах P = I.
+    """
+    import numpy as np
+
+    if not pairs or not residuals_enu or len(pairs) != len(residuals_enu):
+        return None
+
+    vals = []
+    for p, (de, dn, du) in zip(pairs, residuals_enu):
+        if p.enabled_plan:
+            vals.extend([float(de), float(dn)])
+        if p.enabled_h:
+            vals.append(float(du))
+
+    n_active = len(vals)
+    f = n_active - n_unknowns
+    if f <= 0:
+        return None
+
+    arr = np.asarray(vals, dtype=float)
+    return float(np.sqrt(np.sum(arr ** 2) / f))

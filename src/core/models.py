@@ -39,6 +39,11 @@ class DisplaySettings(BaseModel):
     source_name:    str              = "исходная"
     target_name:    str              = "целевая"
     rms_metric_m:   float            = 0.0
+    geoid_src_note: str = ""
+    geoid_tgt_note: str = ""
+    geoid_warn_note: str = ""
+    rms_metric_active_m: float = 0.0
+    rms_metric_sigma0_m: float = 0.0
 
 
 class PointPair(BaseModel):
@@ -162,7 +167,12 @@ class TransformationParams(BaseModel):
             sc_fmt    = sc_fmt,
             sc_label  = sc_label,
             rms_cm    = self.rms_error * 100,
-            rms_enu   = s.rms_metric_m * 100
+            rms_enu   = s.rms_metric_m * 100,
+            rms_enu_active = s.rms_metric_active_m * 100,
+            rms_enu_sigma0 = s.rms_metric_sigma0_m * 100,
+            geoid_src_note = s.geoid_src_note,
+            geoid_tgt_note = s.geoid_tgt_note,
+            geoid_warn_note = s.geoid_warn_note,
         )
 
 
@@ -177,11 +187,25 @@ class HelmertDisplay(BaseModel):
     sc_label:  str
     rms_cm:    float
     rms_enu:   float
+    geoid_src_note: str = ""
+    geoid_tgt_note: str = ""
+    geoid_warn_note: str = ""
+    rms_enu_sigma0: float
+    rms_enu_active: float
 
     def to_text(self) -> str:
+        geoid_block = ""
+        if self.geoid_src_note:
+            geoid_block += f"  {self.geoid_src_note}\n"
+        if self.geoid_tgt_note:
+            geoid_block += f"  {self.geoid_tgt_note}\n"
+        if self.geoid_warn_note:
+            geoid_block += f"  {self.geoid_warn_note}\n"
+
         return (
             f"  Метод:       {self.method_label}\n"
             f"  Направление: {self.direction_label}\n"
+            f"{geoid_block}"
             f"\n"
             f"  dX = {self.dx:+.4f} м\n"
             f"  dY = {self.dy:+.4f} м\n"
@@ -192,7 +216,9 @@ class HelmertDisplay(BaseModel):
             f"  dS = {self.sc_fmt}{self.sc_label}\n"
             f"\n"
             f"  СКО (ECEF) = {self.rms_cm:.2f} см\n"
-            f"  СКО_контр. (ENU) = {self.rms_enu:.4f} см"
+            f"  СКО (ENU, только по вкл. точкам) = {self.rms_enu_active:.4f} см\n"
+            f"  СКО_контр. (ENU) = {self.rms_enu:.4f} см\n"
+            f"  СКО_апост. (ENU) = {self.rms_enu_sigma0:.4f} см"
         )
 
 
