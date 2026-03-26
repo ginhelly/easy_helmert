@@ -5,6 +5,10 @@ from pyproj import CRS
 from core.models import *
 from gui.forms.easy_helmert_base import BaseMainFrame
 from gui.widgets.coordinate_grid import CoordinateGrid
+from gui.controllers.dirty_state import DirtyStateManager
+from gui.controllers.import_service import ImportService
+from gui.controllers.export_service import ExportService
+from gui.controllers.calculation_service import CalculationService, CalculationRunResult
 from utils.xrc_loader import xrc
 from utils.resources import get_resource
 
@@ -23,9 +27,45 @@ class MainFrame(BaseMainFrame):
 
         self.point_pairs: List[PointPair] = []
         self.calc_result: Optional[CalculationResult] = None
-        self.is_modified = False
+        self.dirty = DirtyStateManager(debug=True)
 
         self._init_ui()
+
+        self.import_service = ImportService(
+            parent=self,
+            coord_grid=self.coord_grid,
+            mark_modified=self._mark_modified,
+            clear_residuals=self.coord_grid.clear_residuals,
+            clear_result_text=lambda: self._set_result_text(""),
+        )
+        self.export_service = ExportService(
+            parent=self,
+            coord_grid=self.coord_grid,
+            get_source_crs=lambda: getattr(self, "source_crs", None),
+            get_target_crs=lambda: getattr(self, "target_crs", None),
+            get_calc_result=lambda: self.calc_result,
+            get_source_label=lambda: getattr(self, "_source_crs_label", "") or "",
+            get_src_name=self._src_crs_name,
+            get_tgt_name=self._tgt_crs_name,
+            clear_modified=self._clear_modified,
+        )
+
+        self.calc_service = CalculationService(
+            parent=self,
+            coord_grid=self.coord_grid,
+            get_source_crs=lambda: getattr(self, "source_crs", None),
+            get_target_crs=lambda: getattr(self, "target_crs", None),
+            read_geoid_actions=self._read_geoid_actions,
+            is_geoid_correction_enabled=lambda: (
+                self.m_chk_correction.IsEnabled() and self.m_chk_correction.GetValue()
+            ),
+            set_delta_zeta_mean=lambda v: setattr(self, "_last_delta_zeta_mean", v),
+            update_results_view=self.update_results,
+            get_threshold_m=self._get_threshold_m,
+            autofill_missing_coordinates=self._autofill_missing_coordinates,
+            mark_modified=self._mark_modified,
+        )
+
         self._setup_layout()
         self._bind_events()
         self._setup_toolbar_icons()
@@ -37,15 +77,15 @@ class MainFrame(BaseMainFrame):
 
     # ── Dirty state helpers ────────────────────────────────────────────────
 
+    @property
+    def is_modified(self) -> bool:
+        return self.dirty.is_modified
+
     def _mark_modified(self, reason: str = ""):
-        self.is_modified = True
-        # debug-лог (можешь убрать позже)
-        print(f"[DIRTY] -> True  reason={reason}")
+        self.dirty.mark(reason)
 
     def _clear_modified(self, reason: str = ""):
-        self.is_modified = False
-        # debug-лог
-        print(f"[DIRTY] -> False reason={reason}")
+        self.dirty.clear(reason)
 
     # ── UI init ───────────────────────────────────────────────────────────────
 
@@ -237,197 +277,35 @@ class MainFrame(BaseMainFrame):
         self._mark_modified("swap_dst")
 
     def on_calculate(self, event):
-        geoid_info = None
-
-        # Перед новым расчётом удаляем автодостроенные координаты
-        self.coord_grid.clear_autofilled_coordinates()
-
-        raw_items = self.coord_grid.get_data_with_row_indices()
-        valid_items = [
-            (row, r)
-            for row, r in raw_items
-            if self._is_row_usable_for_calculation(row, r)
-        ]
-        valid_raw = [r for _, r in valid_items]
-
-        # Кол-во уравнений считаем только по активным флагам
-        n_eq = sum(
-            (2 if r["enabled_plan"] else 0) + (1 if r["enabled_h"] else 0)
-            for r in valid_raw
-        )
-
-        if n_eq < 7:
-            wx.MessageBox(
-                "Недостаточно данных.\n\n"
-                "Минимальные варианты:\n"
-                "  • 3 точки с планом и высотой\n"
-                "  • 4 точки только с планом\n"
-                "  • 3 плановых + 1 высотная\n\n"
-                f"Сейчас доступно уравнений: {n_eq} из 7.",
-                "Недостаточно данных",
-                wx.OK | wx.ICON_WARNING,
-            )
+        run_out = self.calc_service.run()
+        if run_out is None:
             return
 
-        if not getattr(self, "source_crs", None):
-            wx.MessageBox(
-                "Задайте исходную систему координат.",
-                "Нет исходной СК",
-                wx.OK | wx.ICON_WARNING,
-            )
-            return
-
-        if not getattr(self, "target_crs", None):
-            wx.MessageBox(
-                "Задайте целевую систему координат.",
-                "Нет целевой СК",
-                wx.OK | wx.ICON_WARNING,
-            )
-            return
-
-        if n_eq < 12:
-            if wx.MessageBox(
-                f"Доступно уравнений: {n_eq} (рекомендуется ≥ 12).\n"
-                "Невязки по активным точкам будут близки к нулю.\n\n"
-                "Продолжить?",
-                "Мало данных",
-                wx.YES_NO | wx.ICON_QUESTION,
-            ) != wx.YES:
-                return
-
-        try:
-            pairs = [
-                PointPair(
-                    name         = r["name"],
-                    x1           = float(r["x1"]),
-                    y1           = float(r["y1"]),
-                    h1           = float(r["h1"]) if r.get("h1") else None,
-                    x2           = float(r["x2"]),
-                    y2           = float(r["y2"]),
-                    h2           = float(r["h2"]) if r.get("h2") else None,
-                    enabled_plan = r["enabled_plan"],
-                    enabled_h    = r["enabled_h"],
-                )
-                for r in valid_raw
-            ]
-        except ValueError as e:
-            wx.MessageBox(
-                f"Ошибка в данных таблицы:\n{e}",
-                "Ошибка",
-                wx.OK | wx.ICON_ERROR,
-            )
-            return
-
-        from core.transformation import calculate_helmert
-        from core.geoid_correction import calculate_helmert_with_geoid, geoid_needed
-
-        src_action, tgt_action = self._read_geoid_actions()
-        apply_correction = (
-            self.m_chk_correction.IsEnabled()
-            and self.m_chk_correction.GetValue()
-        )
-
-        try:
-            if geoid_needed(src_action, tgt_action):
-                result, geoid_info = calculate_helmert_with_geoid(
-                    pairs,
-                    self.source_crs,
-                    self.target_crs,
-                    src_action,
-                    tgt_action,
-                    apply_correction=apply_correction,
-                )
-
-                # sanity-check от рассинхронизации
-                if len(geoid_info.src) != len(valid_items) or len(geoid_info.tgt) != len(valid_items):
-                    raise RuntimeError(
-                        "Рассинхронизация геоидных данных: "
-                        f"src={len(geoid_info.src)}, tgt={len(geoid_info.tgt)}, valid={len(valid_items)}"
-                    )
-
-                all_geoid_src = [None] * self.coord_grid.GetNumberRows()
-                all_geoid_tgt = [None] * self.coord_grid.GetNumberRows()
-
-                for j, (grid_row, _) in enumerate(valid_items):
-                    all_geoid_src[grid_row] = geoid_info.src[j]
-                    all_geoid_tgt[grid_row] = geoid_info.tgt[j]
-
-                self.coord_grid.update_geoid_heights(all_geoid_src, all_geoid_tgt)
-                self._last_delta_zeta_mean = geoid_info.delta_zeta_mean
-            else:
-                result = calculate_helmert(pairs, self.source_crs, self.target_crs)
-                self.coord_grid.clear_geoid_heights()
-                self._last_delta_zeta_mean = None
-
-        except FileNotFoundError as e:
-            wx.MessageBox(
-                f"Файл геоида не найден:\n{e}\n\n"
-                "Убедитесь, что egm08_25.gtx или us_nga_egm2008_1.tif "
-                "присутствует в папке resources/",
-                "Геоид не найден",
-                wx.OK | wx.ICON_ERROR,
-            )
-            return
-        except Exception as e:
-            raise e
-            wx.MessageBox(
-                f"Ошибка расчёта:\n{e}",
-                "Ошибка",
-                wx.OK | wx.ICON_ERROR,
-            )
-            return
-
-        self.calc_result = result
-        self.point_pairs = pairs
-
-        # Разворот невязок на физические строки таблицы
-        all_residuals = [None] * self.coord_grid.GetNumberRows()
-        all_metric = [None] * self.coord_grid.GetNumberRows()
-
-        if len(result.residuals) != len(valid_items) or len(result.residuals_enu) != len(valid_items):
-            wx.MessageBox(
-                "Внутренняя ошибка: рассинхронизация размеров невязок.",
-                "Ошибка",
-                wx.OK | wx.ICON_ERROR,
-            )
-            return
-
-        for j, (grid_row, _) in enumerate(valid_items):
-            all_residuals[grid_row] = result.residuals[j]
-            all_metric[grid_row] = result.residuals_enu[j]
-
-        self.update_results(result)
-
-        # Автодостроение неполных строк с учётом геоида
-        filled_cells = self._autofill_missing_coordinates(raw_items, result, geoid_info)
-        if filled_cells > 0:
-            self._mark_modified("autofill_missing_coordinates")
-
-        threshold = self._get_threshold_m()
-
-        self._last_all_residuals = all_residuals
-        self.coord_grid.update_residuals(all_residuals, threshold=threshold)
-
-        self._last_all_metric = all_metric
-        self.coord_grid.update_metric_residuals(all_metric, threshold=threshold)
+        self.calc_result = run_out.result
+        self.point_pairs = run_out.pairs
+        self._last_all_residuals = run_out.all_residuals
+        self._last_all_metric = run_out.all_metric
     
     def _read_display_settings(self) -> DisplaySettings:
         src_note, tgt_note, warn_note = self._build_geoid_notes()
+
+        rms_all = self._rms_from_grid()
         rms_active = self._rms_enu_active_from_grid()
         sigma0_active = self._sigma0_enu_active_from_grid()
+
         return DisplaySettings(
-            method        = HelmertMethod(self.m_rb_method.GetSelection()),
-            direction     = HelmertDirection(self.m_rb_direction.GetSelection()),
-            rotation_unit = RotationUnit(self.m_choice_rotation_units.GetSelection()),
-            scale_unit    = ScaleUnit(self.m_choice_scale_units.GetSelection()),
-            source_name   = self._src_crs_name(),
-            target_name   = self._tgt_crs_name(),
-            rms_metric_m  = self._rms_from_grid(),
-            rms_metric_active_m = rms_active if rms_active is not None else 0.0,
-            rms_metric_sigma0_m = sigma0_active if sigma0_active is not None else 0.0,
-            geoid_src_note = src_note,
-            geoid_tgt_note = tgt_note,
-            geoid_warn_note = warn_note,
+            method=HelmertMethod(self.m_rb_method.GetSelection()),
+            direction=HelmertDirection(self.m_rb_direction.GetSelection()),
+            rotation_unit=RotationUnit(self.m_choice_rotation_units.GetSelection()),
+            scale_unit=ScaleUnit(self.m_choice_scale_units.GetSelection()),
+            source_name=self._src_crs_name(),
+            target_name=self._tgt_crs_name(),
+            rms_metric_m=rms_all if rms_all is not None else 0.0,
+            rms_metric_active_m=rms_active if rms_active is not None else 0.0,
+            rms_metric_sigma0_m=sigma0_active if sigma0_active is not None else 0.0,
+            geoid_src_note=src_note,
+            geoid_tgt_note=tgt_note,
+            geoid_warn_note=warn_note,
         )
 
     def _update_geoid_controls(self):
@@ -517,73 +395,8 @@ class MainFrame(BaseMainFrame):
                         self.target_crs.name)
         return "целевая"
 
-    def _save_table_to_file(self, event) -> bool:
-        """Сохраняет таблицу координат в CSV/TXT. Возвращает True при успешном сохранении."""
-        data = self.coord_grid.get_data()
-        if not data:
-            wx.MessageBox(
-                "Таблица пуста — нечего сохранять.",
-                "Нет данных",
-                wx.OK | wx.ICON_INFORMATION,
-            )
-            return False
-
-        with wx.FileDialog(
-            self,
-            "Сохранить таблицу точек",
-            wildcard=(
-                "CSV файл (*.csv)|*.csv"
-                "|Текстовый файл (*.txt)|*.txt"
-                "|Все файлы (*.*)|*.*"
-            ),
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
-        ) as dlg:
-            dlg.SetFilename("points.csv")
-            if dlg.ShowModal() == wx.ID_CANCEL:
-                return False
-            path = dlg.GetPath()
-
-        ext = path.rsplit(".", 1)[-1].lower()
-        sep = ";" if ext == "csv" else "\t"
-
-        src_name = self._src_crs_name()
-        tgt_name = self._tgt_crs_name()
-
-        header = sep.join([
-            "Включён (план)",
-            "Включён (высота)",
-            "Имя",
-            f"Восток исх. ({src_name})",
-            f"Север исх. ({src_name})",
-            f"Высота исх. ({src_name})",
-            f"Восток опорн. ({tgt_name})",
-            f"Север опорн. ({tgt_name})",
-            f"Высота опорн. ({tgt_name})",
-        ])
-
-        rows = [header]
-        for d in data:
-            row = sep.join([
-                "1" if d.get("enabled_plan") else "0",
-                "1" if d.get("enabled_h")    else "0",
-                str(d.get("name", "")),
-                str(d.get("x1",   "")),
-                str(d.get("y1",   "")),
-                str(d.get("h1",   "")),
-                str(d.get("x2",   "")),
-                str(d.get("y2",   "")),
-                str(d.get("h2",   "")),
-            ])
-            rows.append(row)
-
-        try:
-            with open(path, "w", encoding="utf-8-sig", newline="\n") as f:
-                f.write("\n".join(rows))
-            self._clear_modified("save_table")
-            return True
-        except IOError as e:
-            wx.MessageBox(str(e), "Ошибка записи", wx.OK | wx.ICON_ERROR)
-            return False
+    def _save_table_to_file(self, event):
+        return self.export_service.save_table_to_file()
 
     # ── View update ───────────────────────────────────────────────────────────
 
@@ -641,30 +454,11 @@ class MainFrame(BaseMainFrame):
         wx.MessageBox("Загрузка из файла — заглушка", "Инфо")
     
     def _ask_save_if_modified(self) -> bool:
-        """
-        True  -> можно продолжать
-        False -> прервать операцию
-        """
-        if not self.is_modified:
-            return True
-
-        if not self.coord_grid.get_data():
-            return True
-
-        dlg = wx.MessageDialog(
-            self,
-            "Данные были изменены.\nСохранить перед продолжением?",
-            "Несохранённые изменения",
-            wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION,
+        return self.dirty.ask_save_if_modified(
+            parent=self,
+            has_data=lambda: bool(self.coord_grid.get_data()),
+            save_callable=lambda: self._save_table_to_file(None),
         )
-        result = dlg.ShowModal()
-        dlg.Destroy()
-
-        if result == wx.ID_YES:
-            return self._save_table_to_file(None)  # важно: учитываем Cancel/ошибку
-        if result == wx.ID_NO:
-            return True
-        return False
 
     def on_exit(self, event):
         """Закрытие приложения с проверкой несохранённых данных."""
@@ -693,171 +487,10 @@ class MainFrame(BaseMainFrame):
         self._set_result_text("")
 
     def on_import_txt(self, event):
-        """Импорт координат из текстового файла — добавление и обновление точек."""
-        with wx.FileDialog(
-            self,
-            "Открыть файл с координатами",
-            wildcard=(
-                "Текстовые файлы (*.txt;*.csv;*.tsv)|*.txt;*.csv;*.tsv"
-                "|Все файлы (*.*)|*.*"
-            ),
-            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
-        ) as file_dlg:
-            if file_dlg.ShowModal() == wx.ID_CANCEL:
-                return
-            filepath = file_dlg.GetPath()
-
-        from gui.dialogs.import_dialog import ImportDialog
-        with ImportDialog(self, filepath) as dlg:
-            if dlg.ShowModal() != wx.ID_OK:
-                return
-            imported = dlg.get_import_data()
-
-        if not imported:
-            wx.MessageBox(
-                "Нет данных для импорта — возможно, не назначен ни один столбец\n"
-                "или файл пустой.",
-                "Импорт",
-                wx.OK | wx.ICON_INFORMATION,
-            )
-            return
-
-        n_added, n_updated = self._merge_imported_data(imported)
-
-        self._mark_modified("import_txt")
-        self.coord_grid.clear_residuals()
-        self._set_result_text("")
-
-        wx.MessageBox(
-            f"Импорт завершён:\n"
-            f"  • обновлено точек: {n_updated}\n"
-            f"  • добавлено точек: {n_added}",
-            "Импорт завершён",
-            wx.OK | wx.ICON_INFORMATION,
-        )
-
-    def _merge_imported_data(self, imported: List[dict]) -> tuple[int, int]:
-        """
-        Сливает импортированные строки с текущим содержимым таблицы.
-
-        Правила слияния:
-        - Ключ совпадения — поле «name».
-        - Обновляются только непустые поля из импорта.
-        - Флаги enabled_plan / enabled_h обновляются, если присутствуют в импорте
-            (текстовый импорт через ImportDialog их не содержит — там они не трогаются).
-        - Если несколько строк с одним именем — обновляются все.
-        - Новые точки добавляются в конец.
-        - Минимум MIN_ROWS строк гарантирует coord_grid.set_data().
-        """
-        _COORD_KEYS = ("x1", "y1", "h1", "x2", "y2", "h2")
-        _FLAG_KEYS  = ("enabled_plan", "enabled_h")
-
-        current: List[dict] = self.coord_grid.get_data()
-
-        existing_idx: Dict[str, List[int]] = {}
-        for i, row in enumerate(current):
-            name = row.get("name", "").strip()
-            if name:
-                existing_idx.setdefault(name, []).append(i)
-
-        # Новые строки, которые ещё не добавлены в current
-        new_rows: List[dict] = []
-        new_by_name: Dict[str, int] = {}  # name -> index in new_rows
-
-        n_added, n_updated = 0, 0
-
-        for imp in imported:
-            imp_name = imp.get("name", "").strip()
-            if not imp_name:
-                continue
-
-            # 1) Обновление существующих строк
-            if imp_name in existing_idx:
-                for idx in existing_idx[imp_name]:
-                    for key in _COORD_KEYS:
-                        val = imp.get(key, "")
-                        if val:
-                            current[idx][key] = val
-                    for flag in _FLAG_KEYS:
-                        if flag in imp:
-                            current[idx][flag] = imp[flag]
-                n_updated += 1
-                continue
-
-            # 2) Обновление уже созданной "новой" строки с тем же именем
-            if imp_name in new_by_name:
-                nr = new_rows[new_by_name[imp_name]]
-                for key in _COORD_KEYS:
-                    val = imp.get(key, "")
-                    if val:
-                        nr[key] = val
-                for flag in _FLAG_KEYS:
-                    if flag in imp:
-                        nr[flag] = imp[flag]
-                n_updated += 1
-                continue
-
-            # 3) Создание новой строки
-            blank = {
-                "enabled_plan": imp.get("enabled_plan", True),
-                "enabled_h":    imp.get("enabled_h", True),
-                "name": imp_name,
-                "x1": "", "y1": "", "h1": "",
-                "x2": "", "y2": "", "h2": "",
-            }
-            for key in _COORD_KEYS:
-                val = imp.get(key, "")
-                if val:
-                    blank[key] = val
-
-            new_by_name[imp_name] = len(new_rows)
-            new_rows.append(blank)
-            n_added += 1
-
-        self.coord_grid.set_data(current + new_rows)
-        return n_added, n_updated
+        self.import_service.import_from_text_dialog()
     
     def on_import_calibration(self, event):
-        """Импорт файла калибровки геодезического контроллера."""
-        from core.calibration_importers import (
-            load_calibration_file, UnsupportedFormatError, WILDCARD
-        )
-
-        with wx.FileDialog(
-            self,
-            "Открыть файл калибровки",
-            wildcard=WILDCARD,
-            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
-        ) as dlg:
-            if dlg.ShowModal() == wx.ID_CANCEL:
-                return
-            filepath = dlg.GetPath()
-
-        try:
-            points = load_calibration_file(filepath)
-        except UnsupportedFormatError as e:
-            wx.MessageBox(str(e), "Неподдерживаемый формат",
-                        wx.OK | wx.ICON_WARNING, self)
-            return
-        except (ValueError, IOError) as e:
-            wx.MessageBox(str(e), "Ошибка импорта",
-                        wx.OK | wx.ICON_ERROR, self)
-            return
-
-        imported = [pt.to_dict() for pt in points]
-        n_added, n_updated = self._merge_imported_data(imported)
-
-        self._mark_modified("import_calibration")
-        self.coord_grid.clear_residuals()
-        self._set_result_text("")
-
-        wx.MessageBox(
-            f"Импорт завершён:\n"
-            f"  • обновлено точек: {n_updated}\n"
-            f"  • добавлено точек: {n_added}",
-            "Импорт калибровки",
-            wx.OK | wx.ICON_INFORMATION,
-        )
+        self.import_service.import_calibration_dialog()
     
     def on_select_source_crs(self, event):
         from gui.dialogs.crs_picker_dialog import CrsPickerDialog
@@ -983,117 +616,19 @@ class MainFrame(BaseMainFrame):
             "Так как EGM2008 определён относительно WGS-84, если WGS-84 не задана как одна из СК, коррекция высот недоступна"
         )
 
-    def _format_crs(self, fmt: str) -> Optional[str]:
-        if self.calc_result is None or self.source_crs is None:
-            wx.MessageBox("Сначала выполните расчёт.",
-                        "Нет результата", wx.OK | wx.ICON_INFORMATION)
-            return None
-
-        display_name = getattr(self, '_source_crs_label', '') or ''
-
-        from utils.crs_export import to_wkt1, to_wkt2, to_proj4
-        try:
-            if fmt == "wkt1":
-                return to_wkt1(self.source_crs, self.calc_result.params, display_name)
-            elif fmt == "wkt2":
-                return to_wkt2(self.source_crs, self.calc_result.params, display_name, self.target_crs)
-            elif fmt == "proj4":
-                return to_proj4(self.source_crs, self.calc_result.params)
-        except Exception as e:
-            wx.MessageBox(f"Не удалось сформировать {fmt.upper()}:\n{e}",
-                        "Ошибка", wx.OK | wx.ICON_ERROR)
-        return None
+    def _format_crs(self, fmt: str):
+        return self.export_service.format_crs(fmt)
 
 
     def _save_crs_to_file(self, fmt: str):
-        text = self._format_crs(fmt)
-        if text is None:
-            return
-
-        if fmt in ("wkt1", "wkt2"):
-            wildcard = (
-                "PRJ файл (*.prj)|*.prj"
-                "|WKT файл (*.wkt)|*.wkt"
-                "|Текстовый файл (*.txt)|*.txt"
-                "|Все файлы (*.*)|*.*"
-            )
-        else:
-            wildcard = (
-                "PRJ файл (*.prj)|*.prj"
-                "|Текстовый файл (*.txt)|*.txt"
-                "|Все файлы (*.*)|*.*"
-            )
-
-        with wx.FileDialog(
-            self, f"Сохранить {fmt.upper()}",
-            wildcard=wildcard,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
-        ) as dlg:
-            dlg.SetFilename(f"result.prj")
-            if dlg.ShowModal() == wx.ID_CANCEL:
-                return
-            path = dlg.GetPath()
-
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(text)
-        except IOError as e:
-            wx.MessageBox(str(e), "Ошибка записи", wx.OK | wx.ICON_ERROR)
+        return self.export_service.save_crs_to_file(fmt)
 
 
     def _copy_crs_to_clipboard(self, fmt: str):
-        text = self._format_crs(fmt)
-        if text is None:
-            return
-        if wx.TheClipboard.Open():
-            try:
-                wx.TheClipboard.SetData(wx.TextDataObject(text))
-                wx.MessageBox(f"Описание проекции в формате {fmt} скопировано в буфер обмена",
-                        "Копирование успешно", wx.OK | wx.ICON_ASTERISK)
-            finally:
-                wx.TheClipboard.Close()
+        return self.export_service.copy_crs_to_clipboard(fmt)
             
     def on_export_calibration(self, event):
-        """Экспорт текущей таблицы в файл калибровки."""
-        from core.calibration_importers import (
-            save_calibration_file, export_wildcard,
-            UnsupportedFormatError, CalibrationPoint,
-        )
-
-        data = self.coord_grid.get_data()
-        if not data:
-            wx.MessageBox("Таблица пуста.", "Нет данных", wx.OK | wx.ICON_INFORMATION)
-            return
-
-        with wx.FileDialog(
-            self, "Экспорт файла калибровки",
-            wildcard=export_wildcard(),
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
-        ) as dlg:
-            dlg.SetFilename("calibration.loc")
-            if dlg.ShowModal() == wx.ID_CANCEL:
-                return
-            filepath = dlg.GetPath()
-
-        points = [
-            CalibrationPoint(
-                name         = d.get("name", ""),
-                x1           = d.get("x1",   ""),
-                y1           = d.get("y1",   ""),
-                h1           = d.get("h1",   ""),
-                x2           = d.get("x2",   ""),
-                y2           = d.get("y2",   ""),
-                h2           = d.get("h2",   ""),
-                enabled_plan = d.get("enabled_plan", True),
-                enabled_h    = d.get("enabled_h",    True),
-            )
-            for d in data
-        ]
-
-        try:
-            save_calibration_file(filepath, points)
-        except (UnsupportedFormatError, IOError, ValueError) as e:
-            wx.MessageBox(str(e), "Ошибка экспорта", wx.OK | wx.ICON_ERROR)
+        self.export_service.export_calibration_dialog()
 
     def on_about(self, event):
         from gui.dialogs.about_dialog import AboutDialog
