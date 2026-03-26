@@ -35,6 +35,18 @@ class MainFrame(BaseMainFrame):
         self.Centre()
         self.Show()
 
+    # ── Dirty state helpers ────────────────────────────────────────────────
+
+    def _mark_modified(self, reason: str = ""):
+        self.is_modified = True
+        # debug-лог (можешь убрать позже)
+        print(f"[DIRTY] -> True  reason={reason}")
+
+    def _clear_modified(self, reason: str = ""):
+        self.is_modified = False
+        # debug-лог
+        print(f"[DIRTY] -> False reason={reason}")
+
     # ── UI init ───────────────────────────────────────────────────────────────
 
     def _init_ui(self):
@@ -179,6 +191,9 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_UPDATE_UI, self._on_update_show_on_map_ui, self.m_menuItem_show_on_map)
         self.Bind(wx.EVT_UPDATE_UI, self._on_update_show_on_map_ui, self.m_tool_show_on_map)
 
+        self.Bind(wx.EVT_BUTTON, self.on_row_move_up,   self.m_btn_row_move_up)
+        self.Bind(wx.EVT_BUTTON, self.on_row_move_down, self.m_btn_row_move_down)
+
     def _on_update_export_ui(self, event):
         event.Enable(self.calc_result is not None)
 
@@ -201,9 +216,8 @@ class MainFrame(BaseMainFrame):
         Вызывается CoordinateGrid при ЛЮБОМ изменении данных:
         редактирование ячейки, переключение чекбокса, swap, дублирование, удаление.
         """
-        self.is_modified = True
+        self._mark_modified("grid_data_changed")
         self._set_result_text("")
-        # clear_residuals через CallAfter — чтобы не ломать текущую операцию грида
         wx.CallAfter(self.coord_grid.clear_residuals)
 
     # ── Handlers ──────────────────────────────────────────────────────────────
@@ -216,11 +230,11 @@ class MainFrame(BaseMainFrame):
 
     def on_swap_src(self, event):
         self.coord_grid.swap_source_xy()
-        self.is_modified = True
+        self._mark_modified("swap_src")
 
     def on_swap_dst(self, event):
         self.coord_grid.swap_target_xy()
-        self.is_modified = True
+        self._mark_modified("swap_dst")
 
     def on_calculate(self, event):
         geoid_info = None
@@ -387,7 +401,7 @@ class MainFrame(BaseMainFrame):
         # Автодостроение неполных строк с учётом геоида
         filled_cells = self._autofill_missing_coordinates(raw_items, result, geoid_info)
         if filled_cells > 0:
-            self.is_modified = True
+            self._mark_modified("autofill_missing_coordinates")
 
         threshold = self._get_threshold_m()
 
@@ -477,11 +491,6 @@ class MainFrame(BaseMainFrame):
         arr = np.array(self.calc_result.residuals_enu)
         return float(np.sqrt(np.mean(arr ** 2)))
 
-    def _on_display_settings_changed(self, event):
-        if self.calc_result is not None:
-            self.update_results(self.calc_result)
-        event.Skip()
-
     def update_results(self, result: CalculationResult):
         display = result.params.as_display(self._read_display_settings())
         text    = display.to_text()
@@ -495,7 +504,6 @@ class MainFrame(BaseMainFrame):
             )
 
         self._set_result_text(text)
-        self.is_modified = False
 
     def _src_crs_name(self) -> str:
         if getattr(self, "source_crs", None):
@@ -509,13 +517,16 @@ class MainFrame(BaseMainFrame):
                         self.target_crs.name)
         return "целевая"
 
-    def _save_table_to_file(self, event):
-        """Сохраняет таблицу координат в CSV-файл."""
+    def _save_table_to_file(self, event) -> bool:
+        """Сохраняет таблицу координат в CSV/TXT. Возвращает True при успешном сохранении."""
         data = self.coord_grid.get_data()
         if not data:
-            wx.MessageBox("Таблица пуста — нечего сохранять.",
-                        "Нет данных", wx.OK | wx.ICON_INFORMATION)
-            return
+            wx.MessageBox(
+                "Таблица пуста — нечего сохранять.",
+                "Нет данных",
+                wx.OK | wx.ICON_INFORMATION,
+            )
+            return False
 
         with wx.FileDialog(
             self,
@@ -529,10 +540,9 @@ class MainFrame(BaseMainFrame):
         ) as dlg:
             dlg.SetFilename("points.csv")
             if dlg.ShowModal() == wx.ID_CANCEL:
-                return
+                return False
             path = dlg.GetPath()
 
-        # Определяем разделитель по расширению
         ext = path.rsplit(".", 1)[-1].lower()
         sep = ";" if ext == "csv" else "\t"
 
@@ -568,10 +578,12 @@ class MainFrame(BaseMainFrame):
 
         try:
             with open(path, "w", encoding="utf-8-sig", newline="\n") as f:
-                # utf-8-sig добавляет BOM — Excel открывает без вопросов
                 f.write("\n".join(rows))
+            self._clear_modified("save_table")
+            return True
         except IOError as e:
             wx.MessageBox(str(e), "Ошибка записи", wx.OK | wx.ICON_ERROR)
+            return False
 
     # ── View update ───────────────────────────────────────────────────────────
 
@@ -630,25 +642,13 @@ class MainFrame(BaseMainFrame):
     
     def _ask_save_if_modified(self) -> bool:
         """
-        Если данные изменены, спрашивает пользователя о сохранении.
-
-        Возвращает:
-            True  — можно продолжать (данные не менялись, либо сохранены,
-                    либо пользователь выбрал «Не сохранять»).
-            False — пользователь нажал «Отмена», операцию надо прервать.
-
-        Использование::
-
-            def on_something(self, event):
-                if not self._ask_save_if_modified():
-                    return          # пользователь передумал
-                ... # выполняем действие
+        True  -> можно продолжать
+        False -> прервать операцию
         """
         if not self.is_modified:
             return True
 
-        # Проверяем, есть ли вообще что сохранять
-        if not self.coord_grid.get_data():# not self.point_pairs and not self.coord_grid.get_data():
+        if not self.coord_grid.get_data():
             return True
 
         dlg = wx.MessageDialog(
@@ -661,11 +661,10 @@ class MainFrame(BaseMainFrame):
         dlg.Destroy()
 
         if result == wx.ID_YES:
-            self._save_table_to_file(None)
-            return True
+            return self._save_table_to_file(None)  # важно: учитываем Cancel/ошибку
         if result == wx.ID_NO:
             return True
-        return False   # wx.ID_CANCEL — прерываем операцию
+        return False
 
     def on_exit(self, event):
         """Закрытие приложения с проверкой несохранённых данных."""
@@ -685,10 +684,10 @@ class MainFrame(BaseMainFrame):
         # Сбрасываем состояние
         self.point_pairs  = []
         self.calc_result  = None
-        self.is_modified  = False
         self._last_all_residuals = []
         self._last_all_metric    = []
         self._last_delta_zeta_mean = None
+        self._clear_modified("new_calc")
 
         # Очищаем панель результатов
         self._set_result_text("")
@@ -725,7 +724,7 @@ class MainFrame(BaseMainFrame):
 
         n_added, n_updated = self._merge_imported_data(imported)
 
-        self.is_modified = True
+        self._mark_modified("import_txt")
         self.coord_grid.clear_residuals()
         self._set_result_text("")
 
@@ -848,7 +847,7 @@ class MainFrame(BaseMainFrame):
         imported = [pt.to_dict() for pt in points]
         n_added, n_updated = self._merge_imported_data(imported)
 
-        self.is_modified = True
+        self._mark_modified("import_calibration")
         self.coord_grid.clear_residuals()
         self._set_result_text("")
 
@@ -1335,16 +1334,16 @@ class MainFrame(BaseMainFrame):
             return
 
         key_to_col = {"y1": 4, "x1": 3, "y2": 8, "x2": 7}
-        self.coord_grid._busy = True
+        self.coord_grid.begin_batch()
         try:
             for (grid_row, key), new_val in updates.items():
                 self.coord_grid.SetCellValue(grid_row, key_to_col[key], new_val)
         finally:
-            self.coord_grid._busy = False
+            self.coord_grid.end_batch(notify=False)
 
         self.coord_grid.ForceRefresh()
 
-        self.is_modified = True
+        self._mark_modified("parse_degrees")
         self._set_result_text("")
         self.coord_grid.clear_residuals()
 
@@ -1403,3 +1402,9 @@ class MainFrame(BaseMainFrame):
             return None
         from core.transformation import compute_sigma0_enu_active
         return compute_sigma0_enu_active(self.point_pairs, self.calc_result.residuals_enu)
+    
+    def on_row_move_up(self, event):
+        self.coord_grid.move_selected_rows_up()
+
+    def on_row_move_down(self, event):
+        self.coord_grid.move_selected_rows_down()

@@ -319,8 +319,17 @@ class CoordinateGrid(gridlib.Grid):
         """
         if self._busy:
             return
+        self._refresh_row_labels()
         if callable(self._on_data_changed):
             self._on_data_changed()
+
+    def begin_batch(self):
+        self._busy = True
+
+    def end_batch(self, notify: bool = True):
+        self._busy = False
+        if notify:
+            self._notify_changed()
 
     # Одиночный клик → сразу в режим редактирования (не двойной)
     def _on_select_cell(self, event):
@@ -665,13 +674,20 @@ class CoordinateGrid(gridlib.Grid):
 
         menu = wx.Menu()
 
+        id_up = wx.NewIdRef()
+        id_down = wx.NewIdRef()
+        menu.Append(id_up, "Переместить вверх")
+        menu.Append(id_down, "Переместить вниз")
+
+        menu.AppendSeparator()
+
         # ── Удалить ──────────────────────────────────────────────────────
         id_del = wx.NewIdRef()
-        item_del = menu.Append(id_del, f"🗑  Удалить {noun_del}")
+        item_del = menu.Append(id_del, f"Удалить {noun_del}")
 
         # ── Дублировать ──────────────────────────────────────────────────
         id_dup = wx.NewIdRef()
-        menu.Append(id_dup, f"📋  Дублировать {noun_dup}")
+        menu.Append(id_dup, f"Дублировать {noun_dup}")
 
         menu.AppendSeparator()
 
@@ -714,6 +730,8 @@ class CoordinateGrid(gridlib.Grid):
         self.Bind(wx.EVT_MENU, lambda _: self.swap_target_xy(),              id=id_swap_dst_all)
         self.Bind(wx.EVT_MENU, lambda _: self.toggle_plan_enabled(_rows),    id=id_toggle_plan)
         self.Bind(wx.EVT_MENU, lambda _: self.toggle_height_enabled(_rows),  id=id_toggle_h)
+        self.Bind(wx.EVT_MENU, lambda _: self.move_selected_rows_up(_rows),   id=id_up)
+        self.Bind(wx.EVT_MENU, lambda _: self.move_selected_rows_down(_rows), id=id_down)
 
         self.PopupMenu(menu)
         menu.Destroy()
@@ -1012,6 +1030,31 @@ class CoordinateGrid(gridlib.Grid):
                 self.SetCellValue(row, col, "")
                 self.SetCellBackgroundColour(row, col, _CLR_NA)
         self._refresh_computed_block()
+
+    def _apply_computed_fonts(self):
+        # сначала сбрасываем шрифт у всех координатных ячеек
+        coord_cols = (_Col.X1, _Col.Y1, _Col.H1, _Col.X2, _Col.Y2, _Col.H2)
+        for row in range(self.GetNumberRows()):
+            for col in coord_cols:
+                self.SetCellFont(row, col, self._normal_cell_font)
+
+        # затем ставим bold там, где computed
+        for row, col in self._computed_cells:
+            if row < self.GetNumberRows():
+                self.SetCellFont(row, col, self._bold_cell_font)
+
+    def _remap_computed_rows_from_order(self, order: list[int]):
+        """
+        order[new_row] = old_row
+        Пересчитываем computed-ячейки из old_row -> new_row
+        """
+        inv = {old_row: new_row for new_row, old_row in enumerate(order)}
+        new_set = set()
+        for (old_row, col) in self._computed_cells:
+            if old_row in inv:
+                new_set.add((inv[old_row], col))
+        self._computed_cells = new_set
+        self._apply_computed_fonts()
     
     def _mark_computed_cell(self, row: int, col: int):
         """Помечает ячейку как автоматически вычисленную."""
@@ -1120,10 +1163,10 @@ class CoordinateGrid(gridlib.Grid):
 
     def update_geoid_heights_partial(self, src_updates, tgt_updates):
         for row, (h, n) in src_updates.items():
-            self.SetCellValue(row, _Col.H1_CORR, f"{h:.4f} (ζ {n:+.4f})")
+            self.SetCellValue(row, _Col.H1_CORR, f"{h:.4f} (ζ={n:+.4f})")
             self.SetCellBackgroundColour(row, _Col.H1_CORR, _CLR_GEOID)
         for row, (h, n) in tgt_updates.items():
-            self.SetCellValue(row, _Col.H2_CORR, f"{h:.4f} (ζ {n:+.4f})")
+            self.SetCellValue(row, _Col.H2_CORR, f"{h:.4f} (ζ={n:+.4f})")
             self.SetCellBackgroundColour(row, _Col.H2_CORR, _CLR_GEOID)
         self._refresh_computed_block()
 
@@ -1185,3 +1228,95 @@ class CoordinateGrid(gridlib.Grid):
             name = self.GetCellValue(row, _Col.NAME).strip()
             self.SetRowLabelValue(row, name if name else str(row + 1))
         self.SetRowLabelSize(wx.grid.GRID_AUTOSIZE)
+
+    def _snapshot_all_rows(self):
+        n_rows = self.GetNumberRows()
+        snap = []
+        for r in range(n_rows):
+            vals = [self.GetCellValue(r, c) for c in range(_Col.COUNT)]
+            bgs  = [self.GetCellBackgroundColour(r, c) for c in range(_Col.COUNT)]
+            snap.append((vals, bgs))
+        return snap
+
+    def _restore_all_rows(self, snap):
+        n_rows = min(self.GetNumberRows(), len(snap))
+        for r in range(n_rows):
+            vals, bgs = snap[r]
+            for c in range(_Col.COUNT):
+                self.SetCellValue(r, c, vals[c])
+                self.SetCellBackgroundColour(r, c, bgs[c])
+
+    def move_selected_rows_up(self, rows: List[int] = None):
+        """
+        Перемещает выделенные строки вверх на 1 позицию.
+        Если выделено несколько строк, все сдвигаются как группа(ы).
+        """
+        if rows is None:
+            rows = self._get_affected_rows()
+        if not rows:
+            return
+
+        rows = sorted(set(rows))
+        if rows[0] == 0:
+            return  # выше некуда
+
+        n = self.GetNumberRows()
+        selected = set(rows)
+
+        # Перестановка индексов
+        order = list(range(n))
+        for r in sorted(selected):
+            order[r - 1], order[r] = order[r], order[r - 1]
+
+        old_snap = self._snapshot_all_rows()
+        new_snap = [old_snap[order[new_r]] for new_r in range(n)]
+        self._restore_all_rows(new_snap)
+        self._remap_computed_rows_from_order(order)
+
+        # Перевыделяем moved-строки
+        moved = [r - 1 for r in rows]
+        self.ClearSelection()
+        for r in moved:
+            self.SelectRow(r, addToSelected=True)
+
+        self.SetGridCursor(moved[0], 0)
+        self.MakeCellVisible(moved[0], 0)
+        self.ForceRefresh()
+        self._notify_changed()
+
+    def move_selected_rows_down(self, rows: List[int] = None):
+        """
+        Перемещает выделенные строки вниз на 1 позицию.
+        Если выделено несколько строк, все сдвигаются как группа(ы).
+        """
+        if rows is None:
+            rows = self._get_affected_rows()
+        if not rows:
+            return
+
+        rows = sorted(set(rows))
+        if rows[-1] >= self.GetNumberRows() - 1:
+            return  # ниже некуда
+
+        n = self.GetNumberRows()
+        selected = set(rows)
+
+        # Перестановка индексов
+        order = list(range(n))
+        for r in sorted(selected, reverse=True):
+            order[r + 1], order[r] = order[r], order[r + 1]
+
+        old_snap = self._snapshot_all_rows()
+        new_snap = [old_snap[order[new_r]] for new_r in range(n)]
+        self._restore_all_rows(new_snap)
+
+        # Перевыделяем moved-строки
+        moved = [r + 1 for r in rows]
+        self.ClearSelection()
+        for r in moved:
+            self.SelectRow(r, addToSelected=True)
+
+        self.SetGridCursor(moved[-1], 0)
+        self.MakeCellVisible(moved[-1], 0)
+        self.ForceRefresh()
+        self._notify_changed()

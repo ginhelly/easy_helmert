@@ -158,19 +158,29 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerTableHeader.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
-        self.m_btn_add_row = wx.Button( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_btn_add_row = wx.Button( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.Size( 42,-1 ), 0 )
 
         self.m_btn_add_row.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_PLUS,  ) )
         self.m_btn_add_row.SetToolTip( u"Добавить строку" )
 
         bSizerTableHeader.Add( self.m_btn_add_row, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
 
-        self.m_btn_del_row = wx.Button( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.DefaultSize, 0 )
+        self.m_btn_del_row = wx.Button( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.Size( 42,-1 ), 0 )
 
         self.m_btn_del_row.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_MINUS,  ) )
         self.m_btn_del_row.SetToolTip( u"Удалить строку" )
 
         bSizerTableHeader.Add( self.m_btn_del_row, 0, wx.ALL|wx.FIXED_MINSIZE, 5 )
+
+        self.m_btn_row_move_up = wx.Button( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.Size( 42,23 ), 0 )
+
+        self.m_btn_row_move_up.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_UP,  ) )
+        bSizerTableHeader.Add( self.m_btn_row_move_up, 0, wx.ALL, 5 )
+
+        self.m_btn_row_move_down = wx.Button( self.m_panel_input, wx.ID_ANY, wx.EmptyString, wx.DefaultPosition, wx.Size( 42,23 ), 0 )
+
+        self.m_btn_row_move_down.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_DOWN,  ) )
+        bSizerTableHeader.Add( self.m_btn_row_move_down, 0, wx.ALL, 5 )
 
         self.m_staticline1 = wx.StaticLine( self.m_panel_input, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, wx.LI_VERTICAL )
         bSizerTableHeader.Add( self.m_staticline1, 0, wx.EXPAND |wx.ALL, 5 )
