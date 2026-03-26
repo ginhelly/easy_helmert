@@ -234,6 +234,8 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_BUTTON, self.on_row_move_up,   self.m_btn_row_move_up)
         self.Bind(wx.EVT_BUTTON, self.on_row_move_down, self.m_btn_row_move_down)
 
+        self.Bind(wx.EVT_BUTTON, self.on_find_optimum, self.m_btn_find_optimal)
+
     def _on_update_export_ui(self, event):
         event.Enable(self.calc_result is not None)
 
@@ -793,3 +795,84 @@ class MainFrame(BaseMainFrame):
 
     def on_row_move_down(self, event):
         self.coord_grid.move_selected_rows_down()
+
+
+    def on_find_optimum(self, event):
+        """Поиск оптимального набора точек."""
+        pairs = self._get_current_pairs_from_grid()
+        if len(pairs) < 3:
+            wx.MessageBox(
+                "Недостаточно точек для оптимизации (минимум 3).",
+                "Нет данных", wx.OK | wx.ICON_INFORMATION
+            )
+            return
+        
+        if self.source_crs is None:
+            wx.MessageBox("Задайте исходную систему координат.", "Нет исходной СК", wx.OK | wx.ICON_WARNING)
+            return
+            
+        if self.target_crs is None:
+            wx.MessageBox("Задайте целевую систему координат.", "Нет целевой СК", wx.OK | wx.ICON_WARNING)
+            return
+        
+        src_action, tgt_action = self._read_geoid_actions()
+        apply_correction = self.m_chk_correction.GetValue()
+        
+        from gui.dialogs.optimize_dialog import OptimizeDialog
+        dlg = OptimizeDialog(self, pairs, self.source_crs, self.target_crs, src_action, tgt_action, apply_correction)
+        
+        if dlg.ShowModal() == wx.ID_OK and hasattr(dlg, 'applied_plan'):
+            # Применяем изменения к таблице
+            for i, (plan, height) in enumerate(zip(dlg.applied_plan, dlg.applied_height)):
+                if i < self.coord_grid.GetNumberRows():
+                    self.coord_grid.set_enabled_plan(i, plan)
+                    self.coord_grid.set_enabled_h(i, height)
+                        
+            # Выполняем расчёт
+            self.coord_grid.ForceRefresh()
+            self._mark_modified("optimize_apply")
+            
+            self.on_calculate(None)
+        
+        dlg.Destroy()
+        
+    def _get_current_pairs_from_grid(self) -> List[PointPair]:
+        """Возвращает список PointPair из текущего состояния таблицы."""
+        data = self.coord_grid.get_data()
+        pairs = []
+        for r in data:
+            try:
+                x1_str = str(r.get("x1", "")).strip()
+                y1_str = str(r.get("y1", "")).strip()
+                x2_str = str(r.get("x2", "")).strip()
+                y2_str = str(r.get("y2", "")).strip()
+                
+                if not x1_str or not y1_str or not x2_str or not y2_str:
+                    continue
+                    
+                x1 = float(x1_str.replace(",", "."))
+                y1 = float(y1_str.replace(",", "."))
+                x2 = float(x2_str.replace(",", "."))
+                y2 = float(y2_str.replace(",", "."))
+                
+                h1 = None
+                h1_str = str(r.get("h1", "")).strip()
+                if h1_str:
+                    h1 = float(h1_str.replace(",", "."))
+                    
+                h2 = None
+                h2_str = str(r.get("h2", "")).strip()
+                if h2_str:
+                    h2 = float(h2_str.replace(",", "."))
+                    
+            except (ValueError, TypeError):
+                continue
+                
+            pairs.append(PointPair(
+                name=r.get("name", ""),
+                x1=x1, y1=y1, h1=h1,
+                x2=x2, y2=y2, h2=h2,
+                enabled_plan=r.get("enabled_plan", True),
+                enabled_h=r.get("enabled_h", True),
+            ))
+        return pairs

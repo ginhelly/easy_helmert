@@ -1387,3 +1387,20 @@ class CoordinateGrid(gridlib.Grid):
 
         self._computed_cells = new_set
         self._apply_computed_fonts()
+
+
+    def set_enabled_plan(self, row: int, value: bool):
+        """Устанавливает чекбокс плана для указанной строки."""
+        if row < 0 or row >= self.GetNumberRows():
+            return
+        self.SetCellValue(row, _Col.USE_PLAN, "1" if value else "")
+        self.ForceRefresh()
+        self._notify_changed()
+
+    def set_enabled_h(self, row: int, value: bool):
+        """Устанавливает чекбокс высоты для указанной строки."""
+        if row < 0 or row >= self.GetNumberRows():
+            return
+        self.SetCellValue(row, _Col.USE_H, "1" if value else "")
+        self.ForceRefresh()
+        self._notify_changed()

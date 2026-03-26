@@ -18,7 +18,7 @@ import wx.dataview
 class BaseMainFrame ( wx.Frame ):
 
     def __init__( self, parent ):
-        wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Easy Helmert", pos = wx.DefaultPosition, size = wx.Size( 1000,800 ), style = wx.DEFAULT_FRAME_STYLE|wx.RESIZE_BORDER|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
+        wx.Frame.__init__ ( self, parent, id = wx.ID_ANY, title = u"Easy Helmert", pos = wx.DefaultPosition, size = wx.Size( 1000,813 ), style = wx.DEFAULT_FRAME_STYLE|wx.RESIZE_BORDER|wx.SYSTEM_MENU|wx.TAB_TRAVERSAL )
 
         self.SetSizeHints( wx.Size( -1,600 ), wx.DefaultSize )
         self.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_HIGHLIGHTTEXT ) )
@@ -295,10 +295,20 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizerGridSettings.Add( ( 0, 0), 1, wx.EXPAND, 5 )
 
+        bSizer30 = wx.BoxSizer( wx.HORIZONTAL )
+
         self.m_btn_calc = wx.Button( self.m_scrolledWindow_settings, wx.ID_ANY, u"РАССЧИТАТЬ", wx.DefaultPosition, wx.Size( -1,-1 ), wx.BU_EXACTFIT )
 
         self.m_btn_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
-        bSizerGridSettings.Add( self.m_btn_calc, 0, wx.ALL|wx.FIXED_MINSIZE|wx.EXPAND, 5 )
+        bSizer30.Add( self.m_btn_calc, 1, wx.ALL|wx.FIXED_MINSIZE|wx.EXPAND, 5 )
+
+        self.m_btn_find_optimal = wx.Button( self.m_scrolledWindow_settings, wx.ID_ANY, u"НАЙТИ ОПТИМУМ", wx.DefaultPosition, wx.Size( -1,-1 ), wx.BU_EXACTFIT )
+
+        self.m_btn_find_optimal.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
+        bSizer30.Add( self.m_btn_find_optimal, 1, wx.ALL|wx.EXPAND, 5 )
+
+
+        bSizerGridSettings.Add( bSizer30, 0, wx.EXPAND, 5 )
 
 
         self.m_scrolledWindow_settings.SetSizer( bSizerGridSettings )
