@@ -666,130 +666,22 @@ class MainFrame(BaseMainFrame):
         из расчётной в табличную (calc_to_table)
         - H ... скорр. заполняется для тех сторон, где action != NOTHING
         """
-        from core.geoid_correction import (
-            GeoidAction,
-            table_to_calc,
-            calc_to_table,
-            build_geoid_context_for_rows,
-        )
-        from utils.crs_utils import (
-            make_helmert_transformer,
-            make_inverse_helmert_transformer,
-        )
-
-        def _to_float(v, default=0.0):
-            if v is None:
-                return float(default)
-            s = str(v).strip()
-            if not s:
-                return float(default)
-            return float(s.replace(",", "."))
-
         src_action, tgt_action = self._read_geoid_actions()
-        dz = geoid_info.delta_zeta_mean if geoid_info else None
 
-        # Геоидный контекст для всех строк (в т.ч. автодостраиваемых)
-        ctx = {}
-        if geoid_info and getattr(geoid_info, "naive_params", None):
-            ctx = build_geoid_context_for_rows(
-                raw_items=raw_items,
-                source_crs=self.source_crs,
-                target_crs=self.target_crs,
-                naive_params=geoid_info.naive_params,
-                delta_zeta_mean=dz,
-            )
-
-        fwd = make_helmert_transformer(self.source_crs, self.target_crs, result.params)
-        inv = make_inverse_helmert_transformer(self.source_crs, self.target_crs, result.params)
-
-        predictions: dict[int, dict[str, str]] = {}
-        geo_src: dict[int, tuple[float, float]] = {}
-        geo_tgt: dict[int, tuple[float, float]] = {}
-
-        for row, r in raw_items:
-            has_src_xy = bool(str(r.get("x1", "")).strip() and str(r.get("y1", "")).strip())
-            has_tgt_xy = bool(str(r.get("x2", "")).strip() and str(r.get("y2", "")).strip())
-
-            # Нужна ровно одна сторона
-            if has_src_xy == has_tgt_xy:
-                continue
-
-            ns = ctx.get(row, {}).get("n_src_eff")
-            nt = ctx.get(row, {}).get("n_tgt_eff")
-
-            # ── Задана исходная сторона -> вычисляем опорную ───────────────────
-            if has_src_xy and not has_tgt_xy:
-                x1 = _to_float(r.get("x1"))
-                y1 = _to_float(r.get("y1"))
-                h1_raw = r.get("h1")
-
-                if str(h1_raw).strip():
-                    h_src_table = _to_float(h1_raw)
-                    h_src_calc = table_to_calc(h_src_table, src_action, ns)
-                else:
-                    h_src_calc = 0.0
-
-                xp, yp, hp = fwd([x1], [y1], [h_src_calc])
-                h_tgt_calc = float(hp[0])
-
-                pred = {
-                    "x2": self._format_coord_value(float(xp[0]), self.target_crs, is_height=False),
-                    "y2": self._format_coord_value(float(yp[0]), self.target_crs, is_height=False),
-                }
-
-                if str(h1_raw).strip():
-                    h_tgt_table = calc_to_table(h_tgt_calc, tgt_action, nt)
-                    pred["h2"] = f"{float(h_tgt_table):.4f}"
-
-                    # H исх. скорр. (заданная сторона) — только если source action активен
-                    if src_action != GeoidAction.NOTHING:
-                        geo_src[row] = (float(h_src_calc), float(ns or 0.0))
-
-                    # H опорн. скорр. (вычисленная сторона) — только если target action активен
-                    if tgt_action != GeoidAction.NOTHING:
-                        geo_tgt[row] = (float(h_tgt_calc), float(nt or 0.0))
-
-                predictions[row] = pred
-
-            # ── Задана опорная сторона -> вычисляем исходную ───────────────────
-            elif has_tgt_xy and not has_src_xy:
-                x2 = _to_float(r.get("x2"))
-                y2 = _to_float(r.get("y2"))
-                h2_raw = r.get("h2")
-
-                if str(h2_raw).strip():
-                    h_tgt_table = _to_float(h2_raw)
-                    h_tgt_calc = table_to_calc(h_tgt_table, tgt_action, nt)
-                else:
-                    h_tgt_calc = 0.0
-
-                xp, yp, hp = inv([x2], [y2], [h_tgt_calc])
-                h_src_calc = float(hp[0])
-
-                pred = {
-                    "x1": self._format_coord_value(float(xp[0]), self.source_crs, is_height=False),
-                    "y1": self._format_coord_value(float(yp[0]), self.source_crs, is_height=False),
-                }
-
-                if str(h2_raw).strip():
-                    h_src_table = calc_to_table(h_src_calc, src_action, ns)
-                    pred["h1"] = f"{float(h_src_table):.4f}"
-
-                    # H опорн. скорр. (заданная сторона) — если target action активен
-                    if tgt_action != GeoidAction.NOTHING:
-                        geo_tgt[row] = (float(h_tgt_calc), float(nt or 0.0))
-
-                    # H исх. скорр. (вычисленная сторона) — если source action активен
-                    if src_action != GeoidAction.NOTHING:
-                        geo_src[row] = (float(h_src_calc), float(ns or 0.0))
-
-                predictions[row] = pred
+        predictions, geo_src, geo_tgt = self.calc_service.prepare_autofill_payload(
+            raw_items=raw_items,
+            result=result,
+            geoid_info=geoid_info,
+            source_crs=self.source_crs,
+            target_crs=self.target_crs,
+            src_action=src_action,
+            tgt_action=tgt_action,
+        )
 
         filled = self.coord_grid.fill_missing_coordinates(predictions)
         if geo_src or geo_tgt:
             self.coord_grid.update_geoid_heights_partial(geo_src, geo_tgt)
         return filled
-    
 
     def _is_row_usable_for_calculation(self, row: int, r: dict) -> bool:
         """
@@ -883,48 +775,13 @@ class MainFrame(BaseMainFrame):
         self.coord_grid.clear_residuals()
 
     def _build_geoid_notes(self) -> tuple[str, str, str]:
-        from core.geoid_correction import GeoidAction, geoid_controls_active
-
-        src = getattr(self, "source_crs", None)
-        tgt = getattr(self, "target_crs", None)
-
-        if not geoid_controls_active(src, tgt):
-            return (
-                "Исходные высоты: учёт геоида недоступен (СК не связаны с WGS-84)",
-                "Опорные высоты: учёт геоида недоступен (СК не связаны с WGS-84)",
-                "",
-            )
-
-        src_action = GeoidAction(self.m_rb_src_action.GetSelection())
-        tgt_action = GeoidAction(self.m_rb_tgt_action.GetSelection())
-
-        def note(prefix: str, action: GeoidAction) -> str:
-            if action == GeoidAction.NOTHING:
-                return f"{prefix} высоты в таблице интерпретировались как геодезические"
-            if action == GeoidAction.ADD:
-                return (
-                    f"{prefix} высоты в таблице интерпретировались как ортометрические "
-                    f"и для вычисления параметров перехода приведены к геодезическим"
-                )
-            return (
-                f"{prefix} высоты в таблице интерпретировались как значения, "
-                f"из которых вычиталась высота геоида (режим нестандартный)"
-            )
-
-        src_note = note("Исходные", src_action)
-        tgt_note = note("Опорные", tgt_action)
-
-        warns = []
-        if src_action == GeoidAction.ADD:
-            warns.append(
-                "\nВНИМАНИЕ: без коррекции на высоту геоида данные параметры будут давать ГЕОДЕЗИЧЕСКИЕ высоты"
-            )
-        if src_action == GeoidAction.SUBTRACT or tgt_action == GeoidAction.SUBTRACT:
-            warns.append(
-                "\nВНИМАНИЕ: режим «Вычесть высоту геоида» методически спорный, используйте с осторожностью"
-            )
-
-        return src_note, tgt_note, " ".join(warns)
+        src_action, tgt_action = self._read_geoid_actions()
+        return self.calc_service.build_geoid_notes(
+            getattr(self, "source_crs", None),
+            getattr(self, "target_crs", None),
+            src_action,
+            tgt_action,
+        )
     
     def _rms_enu_active_from_grid(self) -> Optional[float]:
         if self.calc_result is None or not self.calc_result.residuals_enu:
