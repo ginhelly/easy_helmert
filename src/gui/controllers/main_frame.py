@@ -645,15 +645,8 @@ class MainFrame(BaseMainFrame):
         Для высоты:
         - 4 знака
         """
-        base = crs.source_crs if crs.type_name == "Bound CRS" else crs
+        return self.calc_service._format_coord_value(value, crs, is_height)
 
-        if is_height:
-            return f"{value:.4f}"
-
-        if base.is_geographic:
-            return f"{value:.8f}"
-
-        return f"{value:.4f}"
     
     def _autofill_missing_coordinates(self, raw_items, result, geoid_info) -> int:
         """

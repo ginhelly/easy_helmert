@@ -604,15 +604,35 @@ class CoordinateGrid(gridlib.Grid):
         """Удалить строки. Если rows=None — берёт выделение / курсор."""
         if rows is None:
             rows = self._get_affected_rows()
+        if not rows:
+            return
+
+        rows = sorted(set(rows))
+
+        # Какие строки реально удалятся физически (а не очистятся в MIN_ROWS-режиме)
+        physically_deleted: List[int] = []
+
         for row in sorted(rows, reverse=True):
             if self.GetNumberRows() > self.MIN_ROWS:
                 self.DeleteRows(row, 1)
+                physically_deleted.append(row)
             else:
                 for col in range(_Col.COUNT):
                     if col not in _READONLY_COLS:
                         self.SetCellValue(row, col, "")
                 self.SetCellValue(row, _Col.USE_PLAN, "1")
-                self.SetCellValue(row, _Col.USE_H,    "1")
+                self.SetCellValue(row, _Col.USE_H, "1")
+
+        # В MIN_ROWS-режиме физического удаления нет, но если очищали строку,
+        # нужно снять computed-метки в этой строке
+        if not physically_deleted:
+            for row in rows:
+                for col in (_Col.X1, _Col.Y1, _Col.H1, _Col.X2, _Col.Y2, _Col.H2):
+                    self._computed_cells.discard((row, col))
+            self._apply_computed_fonts()
+        else:
+            self._remap_computed_after_delete(physically_deleted)
+
         self.ForceRefresh()
         self._refresh_row_labels()
         self._notify_changed()
@@ -760,6 +780,7 @@ class CoordinateGrid(gridlib.Grid):
 
         # Вставляем пустые строки
         self.InsertRows(insert_pos, len(rows))
+        self._shift_computed_rows_on_insert(insert_pos, len(rows))
 
         # Инициализируем и заполняем новые строки
         for i, snap in enumerate(snapshots):
@@ -1309,6 +1330,7 @@ class CoordinateGrid(gridlib.Grid):
         old_snap = self._snapshot_all_rows()
         new_snap = [old_snap[order[new_r]] for new_r in range(n)]
         self._restore_all_rows(new_snap)
+        self._remap_computed_rows_from_order(order)
 
         # Перевыделяем moved-строки
         moved = [r + 1 for r in rows]
@@ -1320,3 +1342,48 @@ class CoordinateGrid(gridlib.Grid):
         self.MakeCellVisible(moved[-1], 0)
         self.ForceRefresh()
         self._notify_changed()
+    
+    def _shift_computed_rows_on_insert(self, insert_pos: int, count: int):
+        if count <= 0:
+            return
+        new_set = set()
+        for r, c in self._computed_cells:
+            if r >= insert_pos:
+                new_set.add((r + count, c))
+            else:
+                new_set.add((r, c))
+        self._computed_cells = new_set
+        self._apply_computed_fonts()
+
+    def _remap_computed_after_delete(self, deleted_rows: list[int]):
+        """
+        Пересчитывает self._computed_cells после удаления строк.
+
+        deleted_rows — список физических индексов строк, которые удалены.
+        """
+        if not self._computed_cells or not deleted_rows:
+            return
+
+        deleted = sorted(set(deleted_rows))
+        deleted_set = set(deleted)
+        new_set = set()
+
+        for (row, col) in self._computed_cells:
+            # Если строка удалена — метку выбрасываем
+            if row in deleted_set:
+                continue
+
+            # Сколько удалённых строк было выше текущей
+            shift = 0
+            for d in deleted:
+                if d < row:
+                    shift += 1
+                else:
+                    break
+
+            new_row = row - shift
+            if new_row >= 0:
+                new_set.add((new_row, col))
+
+        self._computed_cells = new_set
+        self._apply_computed_fonts()
