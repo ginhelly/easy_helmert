@@ -1,37 +1,59 @@
-import os
+# -*- coding: utf-8 -*-
+"""
+main.py — точка входа Easy Helmert (PySide6).
+Загружает QSS-тему и запускает главное окно.
+"""
+
 import sys
-import ctypes
-ctypes.windll.shcore.SetProcessDpiAwareness(2)
+from pathlib import Path
 
-import wx
-from gui.controllers.main_frame import MainFrame
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
-# ── DPI Awareness для чёткого отображения на Windows 10/11 ────────────────
-if sys.platform == "win32":
-    try:
-        # Per-Monitor V2 — лучший вариант для Windows 10 1703+
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)
-    except Exception:
-        try:
-            # Fallback для старых Windows
-            ctypes.windll.user32.SetProcessDPIAware()
-        except Exception:
-            pass
+from gui.forms.easy_helmert_base import BaseMainFrame
 
-if hasattr(sys, "_MEIPASS"):
-    os.environ["GDAL_DATA"] = os.path.join(
-        sys._MEIPASS, "rasterio", "gdal_data"
+
+def load_theme(app: QApplication, qss_path: Path) -> None:
+    if qss_path.exists():
+        app.setStyleSheet(qss_path.read_text(encoding="utf-8"))
+    else:
+        print(f"[WARN] theme not found: {qss_path}")
+
+
+def main() -> None:
+    # Включить HiDPI до создания QApplication
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
-    os.environ["PROJ_DATA"] = os.path.join(
-        sys._MEIPASS, "pyproj", "proj_dir", "share", "proj"
-    )
-    os.environ["PROJ_LIB"]      = os.environ["PROJ_DATA"]
-    os.environ["RASTERIO_DATA"] = os.environ["GDAL_DATA"]
 
-def main():
-    app = wx.App(False)
-    frame = MainFrame()
-    app.MainLoop()
+    app = QApplication(sys.argv)
+    app.setApplicationName("Easy Helmert")
+    app.setOrganizationName("EasyHelmert")
+
+    # Базовый шрифт — Segoe UI Variable 13px (Windows 11)
+    font = QFont("Segoe UI Variable", 9)
+    font.setWeight(QFont.Weight.Normal)
+    font.setHintingPreference(QFont.HintingPreference.PreferDefaultHinting)
+    app.setFont(font)
+
+    # QSS-тема — ищем рядом со скриптом, потом resources/
+    here = Path(__file__).parent
+    theme_candidates = [
+        here / "theme.qss",
+        here / "resources" / "theme.qss",
+        here.parent / "resources" / "theme.qss",
+    ]
+    for candidate in theme_candidates:
+        if candidate.exists():
+            load_theme(app, candidate)
+            break
+
+    window = BaseMainFrame()
+    window.show()
+
+    sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

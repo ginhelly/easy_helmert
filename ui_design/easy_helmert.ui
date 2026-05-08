@@ -1,0 +1,622 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>1280</width><height>800</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>Easy Helmert</string>
+  </property>
+  <!-- ═══════════════════════════════════ MENU BAR ═══════════════════════ -->
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect><x>0</x><y>0</y><width>1280</width><height>22</height></rect>
+   </property>
+   <!-- Файл -->
+   <widget class="QMenu" name="menu_file">
+    <property name="title"><string>Файл</string></property>
+    <addaction name="action_new"/>
+    <addaction name="separator"/>
+    <addaction name="action_open"/>
+    <addaction name="action_save"/>
+    <addaction name="separator"/>
+    <addaction name="action_import_txt"/>
+    <addaction name="action_import_calibration"/>
+    <addaction name="separator"/>
+    <addaction name="action_save_table"/>
+    <addaction name="action_export_calibration"/>
+    <addaction name="separator"/>
+    <addaction name="action_exit"/>
+   </widget>
+   <!-- Таблица -->
+   <widget class="QMenu" name="menu_table">
+    <property name="title"><string>Таблица</string></property>
+    <addaction name="action_swap_xy_src"/>
+    <addaction name="action_swap_xy_tgt"/>
+    <addaction name="action_parse_degrees"/>
+    <addaction name="separator"/>
+    <addaction name="action_show_on_map"/>
+   </widget>
+   <!-- Вычисленные параметры -->
+   <widget class="QMenu" name="menu_params">
+    <property name="title"><string>Вычисленные параметры</string></property>
+    <widget class="QMenu" name="menu_save_crs">
+     <property name="title"><string>Сохранить СК в файл</string></property>
+     <addaction name="action_save_wkt1"/>
+     <addaction name="action_save_wkt2"/>
+     <addaction name="action_save_proj4"/>
+    </widget>
+    <widget class="QMenu" name="menu_copy_crs">
+     <property name="title"><string>Скопировать СК</string></property>
+     <addaction name="action_copy_wkt1"/>
+     <addaction name="action_copy_wkt2"/>
+     <addaction name="action_copy_proj4"/>
+    </widget>
+    <addaction name="menu_save_crs"/>
+    <addaction name="menu_copy_crs"/>
+   </widget>
+   <!-- Программа -->
+   <widget class="QMenu" name="menu_program">
+    <property name="title"><string>Программа</string></property>
+    <addaction name="action_about"/>
+   </widget>
+   <addaction name="menu_file"/>
+   <addaction name="menu_table"/>
+   <addaction name="menu_params"/>
+   <addaction name="menu_program"/>
+  </widget>
+
+  <!-- ═══════════════════════════════════ STATUS BAR ════════════════════ -->
+  <widget class="QStatusBar" name="statusBar"/>
+
+  <!-- ═══════════════════════════════════ CENTRAL WIDGET ════════════════ -->
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QVBoxLayout" name="central_vbox">
+    <property name="spacing"><number>0</number></property>
+    <property name="contentsMargins"><number>0</number><number>0</number><number>0</number><number>0</number></property>
+
+    <!-- Горизонтальный сплиттер: левая панель | правая область -->
+    <item>
+     <widget class="QSplitter" name="main_splitter">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <property name="childrenCollapsible">
+       <bool>false</bool>
+      </property>
+
+      <!-- ══════════════════ ЛЕВАЯ ПАНЕЛЬ ══════════════════ -->
+      <widget class="QScrollArea" name="left_scroll">
+       <property name="minimumWidth"><number>280</number></property>
+       <property name="maximumWidth"><number>320</number></property>
+       <property name="widgetResizable"><bool>true</bool></property>
+       <property name="horizontalScrollBarPolicy">
+        <enum>Qt::ScrollBarAlwaysOff</enum>
+       </property>
+       <widget class="QWidget" name="left_scroll_contents">
+        <layout class="QVBoxLayout" name="left_vbox">
+         <property name="spacing"><number>12</number></property>
+         <property name="contentsMargins">
+          <number>10</number><number>10</number><number>10</number><number>10</number>
+         </property>
+
+         <!-- СЕКЦИЯ: СИСТЕМЫ КООРДИНАТ -->
+         <item>
+          <widget class="QLabel" name="lbl_section_crs">
+           <property name="text"><string>СИСТЕМЫ КООРДИНАТ</string></property>
+           <property name="objectName"><string>lbl_section_header</string></property>
+          </widget>
+         </item>
+
+         <!-- Карточка: Исходная СК -->
+         <item>
+          <widget class="QFrame" name="card_src_crs">
+           <property name="objectName"><string>crs_card</string></property>
+           <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+           <layout class="QVBoxLayout" name="card_src_layout">
+            <property name="spacing"><number>6</number></property>
+            <property name="contentsMargins">
+             <number>10</number><number>10</number><number>10</number><number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="lbl_src_title">
+              <property name="text"><string>ИСХОДНАЯ СК</string></property>
+              <property name="objectName"><string>lbl_card_title_src</string></property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="hbox_src_crs">
+              <item>
+               <widget class="QLineEdit" name="lbl_src_crs">
+                <property name="readOnly"><bool>true</bool></property>
+                <property name="placeholderText"><string>Не задана</string></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QToolButton" name="btn_set_src_crs">
+                <property name="text"><string>⚙</string></property>
+                <property name="toolTip"><string>Выбрать исходную СК из базы EPSG</string></property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="hbox_src_geoid">
+              <item>
+               <widget class="QLabel" name="lbl_src_geoid">
+                <property name="text"><string>Геоид:</string></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="cmb_src_geoid">
+                <item><property name="text"><string>Ничего не делать</string></property></item>
+                <item><property name="text"><string>Прибавить EGM2008</string></property></item>
+                <item><property name="text"><string>Вычесть EGM2008</string></property></item>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="chk_correction">
+              <property name="text"><string>Исходные высоты на квазигеоиде</string></property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+
+         <!-- Карточка: Опорная СК -->
+         <item>
+          <widget class="QFrame" name="card_tgt_crs">
+           <property name="objectName"><string>crs_card</string></property>
+           <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+           <layout class="QVBoxLayout" name="card_tgt_layout">
+            <property name="spacing"><number>6</number></property>
+            <property name="contentsMargins">
+             <number>10</number><number>10</number><number>10</number><number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="lbl_tgt_title">
+              <property name="text"><string>ОПОРНАЯ СК</string></property>
+              <property name="objectName"><string>lbl_card_title_tgt</string></property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="hbox_tgt_crs">
+              <item>
+               <widget class="QLineEdit" name="lbl_tgt_crs">
+                <property name="readOnly"><bool>true</bool></property>
+                <property name="text"><string>WGS 84 [EPSG:4979]</string></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QToolButton" name="btn_set_tgt_crs">
+                <property name="text"><string>⚙</string></property>
+                <property name="toolTip"><string>Выбрать опорную СК из базы EPSG</string></property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="hbox_tgt_geoid">
+              <item>
+               <widget class="QLabel" name="lbl_tgt_geoid">
+                <property name="text"><string>Геоид:</string></property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="cmb_tgt_geoid">
+                <item><property name="text"><string>Не использовать (эллипсоидные высоты)</string></property></item>
+                <item><property name="text"><string>Прибавить EGM2008</string></property></item>
+                <item><property name="text"><string>Вычесть EGM2008</string></property></item>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
+
+         <!-- СЕКЦИЯ: ПАРАМЕТРЫ ТРАНСФОРМАЦИИ -->
+         <item>
+          <widget class="QLabel" name="lbl_section_method">
+           <property name="text"><string>ПАРАМЕТРЫ ТРАНСФОРМАЦИИ</string></property>
+           <property name="objectName"><string>lbl_section_header</string></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="rb_method_pv">
+           <property name="text"><string>EPSG:1033 (9606) Position Vector</string></property>
+           <property name="checked"><bool>true</bool></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="rb_method_cf">
+           <property name="text"><string>EPSG:1032 (9607) Coordinate Frame</string></property>
+          </widget>
+         </item>
+
+         <!-- Распорка -->
+         <item>
+          <spacer name="left_spacer">
+           <property name="orientation"><enum>Qt::Vertical</enum></property>
+           <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+          </spacer>
+         </item>
+
+         <!-- Кнопки действий -->
+         <item>
+          <widget class="QPushButton" name="btn_calculate">
+           <property name="text"><string>РАССЧИТАТЬ</string></property>
+           <property name="objectName"><string>btn_calculate</string></property>
+           <property name="minimumHeight"><number>36</number></property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_optimize">
+           <property name="text"><string>НАЙТИ ОПТИМУМ</string></property>
+           <property name="objectName"><string>btn_optimize</string></property>
+          </widget>
+         </item>
+
+        </layout>
+       </widget>
+      </widget>
+      <!-- конец левой панели -->
+
+      <!-- ══════════════════ ПРАВАЯ ОБЛАСТЬ ══════════════════ -->
+      <widget class="QWidget" name="right_area">
+       <layout class="QVBoxLayout" name="right_vbox">
+        <property name="spacing"><number>0</number></property>
+        <property name="contentsMargins">
+         <number>0</number><number>0</number><number>0</number><number>0</number>
+        </property>
+
+        <!-- Вкладки -->
+        <item>
+         <widget class="QTabWidget" name="tab_widget">
+          <property name="tabPosition"><enum>QTabWidget::North</enum></property>
+          <property name="documentMode"><bool>true</bool></property>
+
+          <!-- Вкладка 1: Расчёт параметров -->
+          <widget class="QWidget" name="tab_calc">
+           <attribute name="title"><string>Расчёт параметров</string></attribute>
+           <layout class="QVBoxLayout" name="tab_calc_layout">
+            <property name="spacing"><number>0</number></property>
+            <property name="contentsMargins">
+             <number>0</number><number>0</number><number>0</number><number>0</number>
+            </property>
+
+            <!-- Тулбар таблицы -->
+            <item>
+             <widget class="QWidget" name="toolbar_widget">
+              <property name="objectName"><string>table_toolbar</string></property>
+              <property name="maximumHeight"><number>36</number></property>
+              <layout class="QHBoxLayout" name="toolbar_hbox">
+               <property name="spacing"><number>2</number></property>
+               <property name="contentsMargins">
+                <number>6</number><number>2</number><number>6</number><number>2</number>
+               </property>
+               <!-- Группа 1: строки -->
+               <item><widget class="QPushButton" name="btn_add_row"><property name="text"><string>＋ Добавить</string></property><property name="maximumWidth"><number>90</number></property></widget></item>
+               <item><widget class="QPushButton" name="btn_del_row"><property name="text"><string>− Удалить</string></property><property name="maximumWidth"><number>80</number></property></widget></item>
+               <item><widget class="QPushButton" name="btn_row_up"><property name="text"><string>↑</string></property><property name="maximumWidth"><number>28</number></property></widget></item>
+               <item><widget class="QPushButton" name="btn_row_down"><property name="text"><string>↓</string></property><property name="maximumWidth"><number>28</number></property></widget></item>
+               <!-- Разделитель -->
+               <item><widget class="QFrame" name="tb_sep1"><property name="frameShape"><enum>QFrame::VLine</enum></property></widget></item>
+               <!-- Группа 2: I/O -->
+               <item><widget class="QPushButton" name="btn_import"><property name="text"><string>⬆ Импорт</string></property><property name="maximumWidth"><number>80</number></property></widget></item>
+               <item><widget class="QPushButton" name="btn_export"><property name="text"><string>⬇ Экспорт</string></property><property name="maximumWidth"><number>80</number></property></widget></item>
+               <!-- Разделитель -->
+               <item><widget class="QFrame" name="tb_sep2"><property name="frameShape"><enum>QFrame::VLine</enum></property></widget></item>
+               <!-- Группа 3: опасные -->
+               <item><widget class="QPushButton" name="btn_swap_src"><property name="text"><string>⇅ С↔В</string></property><property name="objectName"><string>tb_btn_danger</string></property><property name="maximumWidth"><number>70</number></property></widget></item>
+               <item><widget class="QPushButton" name="btn_swap_dst"><property name="text"><string>⇄ Исх↔Оп</string></property><property name="objectName"><string>tb_btn_danger</string></property><property name="maximumWidth"><number>80</number></property></widget></item>
+               <item><widget class="QPushButton" name="btn_parse_dms"><property name="text"><string>° DMS→DD</string></property><property name="objectName"><string>tb_btn_danger</string></property><property name="maximumWidth"><number>80</number></property></widget></item>
+               <!-- Распорка -->
+               <item>
+                <spacer name="tb_spacer">
+                 <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                 <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+                </spacer>
+               </item>
+               <!-- Счётчик точек -->
+               <item><widget class="QLabel" name="lbl_point_count"><property name="text"><string>Точек: 0 · Используется: 0</string></property><property name="objectName"><string>lbl_point_count</string></property></widget></item>
+              </layout>
+             </widget>
+            </item>
+
+            <!-- Вертикальный сплиттер: таблица | нижняя панель -->
+            <item>
+             <widget class="QSplitter" name="right_splitter">
+              <property name="orientation"><enum>Qt::Vertical</enum></property>
+              <property name="childrenCollapsible"><bool>false</bool></property>
+
+              <!-- Заглушка для CoordinateGrid -->
+              <widget class="QWidget" name="grid_placeholder">
+               <property name="minimumHeight"><number>180</number></property>
+              </widget>
+
+              <!-- ══════ НИЖНЯЯ ПАНЕЛЬ РЕЗУЛЬТАТОВ ══════ -->
+              <widget class="QWidget" name="results_panel">
+               <property name="objectName"><string>results_panel</string></property>
+               <property name="minimumHeight"><number>180</number></property>
+               <layout class="QHBoxLayout" name="results_hbox">
+                <property name="spacing"><number>0</number></property>
+                <property name="contentsMargins">
+                 <number>0</number><number>0</number><number>0</number><number>0</number>
+                </property>
+
+                <!-- Горизонтальный сплиттер внутри панели -->
+                <item>
+                 <widget class="QSplitter" name="results_splitter">
+                  <property name="orientation"><enum>Qt::Horizontal</enum></property>
+                  <property name="childrenCollapsible"><bool>false</bool></property>
+
+                  <!-- Колонка 1: История -->
+                  <widget class="QWidget" name="col_history">
+                   <layout class="QVBoxLayout" name="col_history_layout">
+                    <property name="contentsMargins">
+                     <number>8</number><number>8</number><number>4</number><number>8</number>
+                    </property>
+                    <property name="spacing"><number>4</number></property>
+                    <item>
+                     <widget class="QLabel" name="lbl_history_title">
+                      <property name="text"><string>1. ИСТОРИЯ ВЫЧИСЛЕНИЙ</string></property>
+                      <property name="objectName"><string>lbl_panel_section</string></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QListWidget" name="history_list">
+                      <property name="objectName"><string>history_list</string></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <layout class="QHBoxLayout" name="history_btns">
+                      <item><widget class="QPushButton" name="btn_history_apply"><property name="text"><string>✔ Применить</string></property></widget></item>
+                      <item><widget class="QPushButton" name="btn_history_delete"><property name="text"><string>✕ Удалить</string></property></widget></item>
+                     </layout>
+                    </item>
+                   </layout>
+                  </widget>
+
+                  <!-- Колонка 2: Настройки отображения -->
+                  <widget class="QWidget" name="col_display">
+                   <property name="minimumWidth"><number>190</number></property>
+                   <property name="maximumWidth"><number>220</number></property>
+                   <layout class="QVBoxLayout" name="col_display_layout">
+                    <property name="contentsMargins">
+                     <number>8</number><number>8</number><number>8</number><number>8</number>
+                    </property>
+                    <property name="spacing"><number>6</number></property>
+                    <item>
+                     <widget class="QLabel" name="lbl_display_title">
+                      <property name="text"><string>2. НАСТРОЙКИ ОТОБРАЖЕНИЯ</string></property>
+                      <property name="objectName"><string>lbl_panel_section</string></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QRadioButton" name="rb_display_pv">
+                      <property name="text"><string>Position Vector</string></property>
+                      <property name="checked"><bool>true</bool></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QRadioButton" name="rb_display_cf">
+                      <property name="text"><string>Coord Frame</string></property>
+                     </widget>
+                    </item>
+                    <item><widget class="QFrame" name="disp_sep1"><property name="frameShape"><enum>QFrame::HLine</enum></property></widget></item>
+                    <item>
+                     <widget class="QRadioButton" name="rb_dir_fwd">
+                      <property name="text"><string>Исх → Опорн</string></property>
+                      <property name="checked"><bool>true</bool></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QRadioButton" name="rb_dir_inv">
+                      <property name="text"><string>Опорн → Исх</string></property>
+                     </widget>
+                    </item>
+                    <item><widget class="QFrame" name="disp_sep2"><property name="frameShape"><enum>QFrame::HLine</enum></property></widget></item>
+                    <item>
+                     <layout class="QHBoxLayout">
+                      <item><widget class="QLabel"><property name="text"><string>Сдвиг</string></property></widget></item>
+                      <item><widget class="QComboBox" name="cmb_shift_units"><item><property name="text"><string>м</string></property></item><item><property name="text"><string>мм</string></property></item></widget></item>
+                     </layout>
+                    </item>
+                    <item>
+                     <layout class="QHBoxLayout">
+                      <item><widget class="QLabel"><property name="text"><string>Поворот</string></property></widget></item>
+                      <item><widget class="QComboBox" name="cmb_rotation_units"><item><property name="text"><string>"</string></property></item><item><property name="text"><string>рад</string></property></item><item><property name="text"><string>мрад</string></property></item></widget></item>
+                     </layout>
+                    </item>
+                    <item>
+                     <layout class="QHBoxLayout">
+                      <item><widget class="QLabel"><property name="text"><string>Масштаб</string></property></widget></item>
+                      <item><widget class="QComboBox" name="cmb_scale_units"><item><property name="text"><string>ppm</string></property></item><item><property name="text"><string>ppb</string></property></item><item><property name="text"><string>безразм.</string></property></item></widget></item>
+                     </layout>
+                    </item>
+                    <item>
+                     <layout class="QHBoxLayout" name="threshold_hbox">
+                      <item><widget class="QLabel" name="lbl_threshold"><property name="text"><string>Порог невязки:</string></property></widget></item>
+                      <item><widget class="QDoubleSpinBox" name="spin_threshold"><property name="value"><double>0.100</double></property><property name="singleStep"><double>0.010</double></property><property name="decimals"><number>3</number></property><property name="maximum"><double>999.000</double></property></widget></item>
+                      <item><widget class="QComboBox" name="cmb_threshold_units"><item><property name="text"><string>м</string></property></item><item><property name="text"><string>×СКО</string></property></item></widget></item>
+                     </layout>
+                    </item>
+                    <item>
+                     <spacer>
+                      <property name="orientation"><enum>Qt::Vertical</enum></property>
+                      <property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </widget>
+
+                  <!-- Колонка 3: Параметры трансформации -->
+                  <widget class="QWidget" name="col_params">
+                   <layout class="QVBoxLayout" name="col_params_layout">
+                    <property name="contentsMargins">
+                     <number>8</number><number>8</number><number>8</number><number>8</number>
+                    </property>
+                    <property name="spacing"><number>4</number></property>
+                    <item>
+                     <widget class="QLabel" name="lbl_params_title">
+                      <property name="text"><string>3. ПАРАМЕТРЫ ТРАНСФОРМАЦИИ</string></property>
+                      <property name="objectName"><string>lbl_panel_section</string></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QTableWidget" name="params_table">
+                      <property name="objectName"><string>params_table</string></property>
+                      <property name="showGrid"><bool>false</bool></property>
+                      <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+                      <property name="selectionMode"><enum>QAbstractItemView::NoSelection</enum></property>
+                      <column><property name="text"><string>Параметр</string></property></column>
+                      <column><property name="text"><string>Значение</string></property></column>
+                      <column><property name="text"><string>Ед.</string></property></column>
+                      <row><property name="text"><string>dX</string></property></row>
+                      <row><property name="text"><string>dY</string></property></row>
+                      <row><property name="text"><string>dZ</string></property></row>
+                      <row><property name="text"><string>rX</string></property></row>
+                      <row><property name="text"><string>rY</string></property></row>
+                      <row><property name="text"><string>rZ</string></property></row>
+                      <row><property name="text"><string>dS</string></property></row>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="btn_copy_params">
+                      <property name="text"><string>Скопировать параметры</string></property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </widget>
+
+                  <!-- Колонка 4: Оценка точности -->
+                  <widget class="QWidget" name="col_accuracy">
+                   <layout class="QVBoxLayout" name="col_accuracy_layout">
+                    <property name="contentsMargins">
+                     <number>8</number><number>8</number><number>8</number><number>8</number>
+                    </property>
+                    <property name="spacing"><number>4</number></property>
+                    <item>
+                     <widget class="QLabel" name="lbl_accuracy_title">
+                      <property name="text"><string>4. ОЦЕНКА ТОЧНОСТИ</string></property>
+                      <property name="objectName"><string>lbl_panel_section</string></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lbl_rms_big">
+                      <property name="text"><string>RMS: —</string></property>
+                      <property name="objectName"><string>lbl_rms_big</string></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lbl_rms_badge">
+                      <property name="text"><string></string></property>
+                      <property name="objectName"><string>badge_ok</string></property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lbl_rms_x"><property name="text"><string>RMS по X: —</string></property></widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lbl_rms_y"><property name="text"><string>RMS по Y: —</string></property></widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lbl_rms_z"><property name="text"><string>RMS по Z: —</string></property></widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lbl_rms_spatial"><property name="text"><string>RMS пространственный: —</string></property></widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lbl_rms_max"><property name="text"><string>Максимум |d|: —</string></property></widget>
+                    </item>
+                    <item>
+                     <spacer>
+                      <property name="orientation"><enum>Qt::Vertical</enum></property>
+                      <property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property>
+                     </spacer>
+                    </item>
+                   </layout>
+                  </widget>
+
+                 </widget>
+                 <!-- конец results_splitter -->
+                </item>
+               </layout>
+              </widget>
+              <!-- конец results_panel -->
+
+             </widget>
+             <!-- конец right_splitter -->
+            </item>
+
+           </layout>
+          </widget>
+          <!-- конец tab_calc -->
+
+          <!-- Вкладка 2: Калькулятор -->
+          <widget class="QWidget" name="tab_calculator">
+           <attribute name="title"><string>Калькулятор</string></attribute>
+           <layout class="QVBoxLayout">
+            <item><widget class="QLabel"><property name="text"><string>Калькулятор — в разработке</string></property></widget></item>
+           </layout>
+          </widget>
+
+          <!-- Вкладка 3: Преобразование геоида -->
+          <widget class="QWidget" name="tab_geoid">
+           <attribute name="title"><string>Преобразование геоида</string></attribute>
+           <layout class="QVBoxLayout">
+            <item><widget class="QLabel"><property name="text"><string>Преобразование геоида — в разработке</string></property></widget></item>
+           </layout>
+          </widget>
+
+          <!-- Вкладка 4: Карта -->
+          <widget class="QWidget" name="tab_map">
+           <attribute name="title"><string>Карта</string></attribute>
+           <layout class="QVBoxLayout">
+            <item><widget class="QLabel"><property name="text"><string>Карта — в разработке</string></property></widget></item>
+           </layout>
+          </widget>
+
+         </widget>
+         <!-- конец tab_widget -->
+        </item>
+       </layout>
+      </widget>
+      <!-- конец правой области -->
+
+     </widget>
+     <!-- конец main_splitter -->
+    </item>
+   </layout>
+  </widget>
+  <!-- конец centralWidget -->
+
+  <!-- ═══════════════ ACTIONS ═══════════════ -->
+  <action name="action_new"><property name="text"><string>Новый расчёт</string></property></action>
+  <action name="action_open"><property name="text"><string>Открыть...</string></property></action>
+  <action name="action_save"><property name="text"><string>Сохранить</string></property></action>
+  <action name="action_import_txt"><property name="text"><string>Импорт из текста...</string></property></action>
+  <action name="action_import_calibration"><property name="text"><string>Импорт калибровки...</string></property></action>
+  <action name="action_save_table"><property name="text"><string>Сохранить таблицу...</string></property></action>
+  <action name="action_export_calibration"><property name="text"><string>Экспорт калибровки...</string></property></action>
+  <action name="action_exit"><property name="text"><string>Выход</string></property><property name="shortcut"><string>Alt+F4</string></property></action>
+  <action name="action_swap_xy_src"><property name="text"><string>Поменять С↔В (исходные)</string></property></action>
+  <action name="action_swap_xy_tgt"><property name="text"><string>Поменять Исх↔Опорные</string></property></action>
+  <action name="action_parse_degrees"><property name="text"><string>° DMS → DD</string></property></action>
+  <action name="action_show_on_map"><property name="text"><string>Показать на карте</string></property></action>
+  <action name="action_save_wkt1"><property name="text"><string>WKT1 (TOWGS84)...</string></property></action>
+  <action name="action_save_wkt2"><property name="text"><string>WKT2 (OGC)...</string></property></action>
+  <action name="action_save_proj4"><property name="text"><string>Proj4 (+towgs84)...</string></property></action>
+  <action name="action_copy_wkt1"><property name="text"><string>WKT1 (TOWGS84)</string></property></action>
+  <action name="action_copy_wkt2"><property name="text"><string>WKT2 (OGC)</string></property></action>
+  <action name="action_copy_proj4"><property name="text"><string>Proj4 (+towgs84)</string></property></action>
+  <action name="action_about"><property name="text"><string>О программе</string></property></action>
+
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
