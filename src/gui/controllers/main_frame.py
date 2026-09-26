@@ -29,6 +29,13 @@ class MainFrame(BaseMainFrame):
         self.calc_result: Optional[CalculationResult] = None
         self.dirty = DirtyStateManager(debug=True)
 
+        # ── Режим источника параметров ("калькулятор" vs расчёт по точкам) ────
+        self._params_mode: str = "fitted"          # "fitted" | "imported"
+        self._mode_key: str = "fit"                # "fit" | "db_preset" | "manual"
+        self._mode_label: str = "МНК по точкам"
+        self._current_fixed_params: Optional[TransformationParams] = None
+        self._status_default_text: str = ""
+
         self._init_ui()
 
         self.import_service = ImportService(
@@ -234,7 +241,9 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_BUTTON, self.on_row_move_up,   self.m_btn_row_move_up)
         self.Bind(wx.EVT_BUTTON, self.on_row_move_down, self.m_btn_row_move_down)
 
-        self.Bind(wx.EVT_BUTTON, self.on_find_optimum, self.m_btn_find_optimal)
+        self.Bind(wx.EVT_BUTTON, self._on_mode_button, self.m_btn_mode)
+        self.Bind(wx.EVT_BUTTON, self._on_save_preset, self.m_btn_save_preset)
+        self.Bind(wx.EVT_UPDATE_UI, self._on_update_save_preset_ui, self.m_btn_save_preset)
 
     def _on_update_export_ui(self, event):
         event.Enable(self.calc_result is not None)
@@ -279,7 +288,10 @@ class MainFrame(BaseMainFrame):
         self._mark_modified("swap_dst")
 
     def on_calculate(self, event):
-        run_out = self.calc_service.run()
+        if self._params_mode == "imported":
+            run_out = self.calc_service.run_with_fixed_params(self._current_fixed_params)
+        else:
+            run_out = self.calc_service.run()
         if run_out is None:
             return
 
@@ -287,6 +299,128 @@ class MainFrame(BaseMainFrame):
         self.point_pairs = run_out.pairs
         self._last_all_residuals = run_out.all_residuals
         self._last_all_metric = run_out.all_metric
+
+    # ── Режим источника параметров ───────────────────────────────────────────
+
+    # Короткая, фиксированной длины подпись кнопки — полное название пресета
+    # (может быть сколь угодно длинным) в неё НЕ подставляется, чтобы не ломать
+    # вёрстку (BU_EXACTFIT растягивает кнопку по тексту); полное название —
+    # в строке статуса и в тексте результата.
+    _MODE_CATEGORY_LABELS = {
+        "fit":       "МНК по точкам",
+        "db_preset": "Сохранённые параметры",
+        "manual":    "Параметры вручную",
+    }
+
+    def _update_mode_ui(self):
+        category_label = self._MODE_CATEGORY_LABELS.get(self._mode_key, self._mode_key)
+        self.m_btn_mode.SetLabel(f"РЕЖИМ: {category_label.upper()} ▾")
+        self.m_btn_calc.SetLabel("Обновить невязки" if self._params_mode == "imported" else "РАССЧИТАТЬ")
+
+        self._status_default_text = self._mode_label if self._params_mode == "imported" else ""
+        self.m_statusBar1.SetStatusText(self._status_default_text)
+
+        self.m_scrolledWindow_settings.Layout()
+
+    def _exit_calculator_mode(self):
+        """Возврат к обычному расчёту по МНК. Таблицу НЕ чистит — в отличие
+        от «Новый расчёт», это только смена источника параметров."""
+        self._params_mode = "fitted"
+        self._mode_key = "fit"
+        self._mode_label = "МНК по точкам"
+        self._current_fixed_params = None
+        self._update_mode_ui()
+
+    def _enter_calculator_mode(self, params: TransformationParams, mode_key: str, label: str):
+        self._params_mode = "imported"
+        self._mode_key = mode_key
+        self._mode_label = label
+        self._current_fixed_params = params
+        self._update_mode_ui()
+
+        run_out = self.calc_service.run_with_fixed_params(params)
+        if run_out is not None:
+            self.calc_result = run_out.result
+            self.point_pairs = run_out.pairs
+            self._last_all_residuals = run_out.all_residuals
+            self._last_all_metric = run_out.all_metric
+
+    def _on_mode_button(self, event):
+        # Обычные (не радио-) пункты меню — сознательно: AppendRadioItem на
+        # части платформ не шлёт EVT_MENU при повторном клике на уже
+        # отмеченный пункт, а для db_preset/manual повторный клик должен
+        # заново открывать диалог выбора/ввода (чтобы можно было выбрать
+        # другой пресет, не выходя из режима калькулятора). Текущий пункт
+        # просто помечаем маркером в тексте.
+        entries = [
+            ("fit",       "Новый расчёт по МНК"),
+            ("optimize",  "Найти оптимум для расчёта по МНК"),
+            ("db_preset", "Сохранённые параметры (из базы)"),
+            ("manual",    "Указать параметры вручную"),
+        ]
+        menu = wx.Menu()
+        for key, label in entries:
+            prefix = "● " if key == self._mode_key else "     "
+            item = menu.Append(wx.ID_ANY, prefix + label)
+            self.Bind(wx.EVT_MENU, lambda e, k=key: self._on_mode_selected(k), item)
+        self.PopupMenu(menu)
+        menu.Destroy()
+
+    def _on_mode_selected(self, key: str):
+        if key == "fit":
+            if self._params_mode != "fitted":
+                self._exit_calculator_mode()
+        elif key == "optimize":
+            self.on_find_optimum(None)
+        elif key == "db_preset":
+            self._pick_db_preset()
+        elif key == "manual":
+            self._pick_manual_params()
+
+    def _pick_db_preset(self):
+        from gui.dialogs.transform_preset_picker_dialog import TransformPresetPickerDialog
+        with TransformPresetPickerDialog(self) as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                params = dlg.get_params()
+                name = dlg.get_preset_name()
+                self._enter_calculator_mode(params, "db_preset", f"Сохранённые параметры: {name}")
+
+    def _pick_manual_params(self):
+        from gui.dialogs.import_params_dialog import ImportParamsDialog
+        with ImportParamsDialog(self) as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                params = dlg.get_params()
+                self._enter_calculator_mode(params, "manual", "Параметры вручную")
+
+    def _on_save_preset(self, event):
+        if self.calc_result is None:
+            return
+
+        from gui.dialogs.save_preset_dialog import SavePresetDialog
+        from utils.crs_utils import short_crs_description
+
+        initial_description = ""
+        src = getattr(self, "source_crs", None)
+        tgt = getattr(self, "target_crs", None)
+        if src is not None and tgt is not None:
+            initial_description = (
+                f"Исходная СК: {short_crs_description(src)}\n"
+                f"Опорная СК: {short_crs_description(tgt)}"
+            )
+
+        with SavePresetDialog(self, initial_description=initial_description) as dlg:
+            if dlg.ShowModal() == wx.ID_OK:
+                from core.user_transforms_db import HELMERT7, helmert7_to_json, save_preset
+                save_preset(
+                    name=dlg.get_name(),
+                    description=dlg.get_description(),
+                    method=HELMERT7,
+                    params=helmert7_to_json(self.calc_result.params),
+                )
+                wx.MessageBox("Параметры сохранены в базу.", "Готово", wx.OK | wx.ICON_INFORMATION, self)
+
+    def _on_update_save_preset_ui(self, event):
+        event.Enable(self.calc_result is not None)
     
     def _read_display_settings(self) -> DisplaySettings:
         src_note, tgt_note, warn_note = self._build_geoid_notes()
@@ -374,6 +508,9 @@ class MainFrame(BaseMainFrame):
     def update_results(self, result: CalculationResult):
         display = result.params.as_display(self._read_display_settings())
         text    = display.to_text()
+
+        if self._params_mode == "imported":
+            text = f"РЕЖИМ: КАЛЬКУЛЯТОР ({self._mode_label})\n\n" + text
 
         dz = getattr(self, "_last_delta_zeta_mean", None)
         if dz is not None:
@@ -483,6 +620,7 @@ class MainFrame(BaseMainFrame):
         self._last_all_residuals = []
         self._last_all_metric    = []
         self._last_delta_zeta_mean = None
+        self._exit_calculator_mode()
         self._clear_modified("new_calc")
 
         # Очищаем панель результатов
@@ -570,12 +708,14 @@ class MainFrame(BaseMainFrame):
     def _bind_statusbar_hint(self, ctrl: wx.Window, text: str):
         """
         Показывает подсказку в статусбаре при наведении мыши на контрол.
-        Восстанавливает пустую строку при уходе курсора.
+        При уходе курсора восстанавливает не пустую строку, а текущий
+        "фоновый" текст статусбара (`_status_default_text`) — в режиме
+        калькулятора там держится название применённых параметров.
         """
         ctrl.Bind(wx.EVT_ENTER_WINDOW,
                 lambda e, t=text: (self.m_statusBar1.SetStatusText(t), e.Skip()))
         ctrl.Bind(wx.EVT_LEAVE_WINDOW,
-                lambda e: (self.m_statusBar1.SetStatusText(""), e.Skip()))
+                lambda e: (self.m_statusBar1.SetStatusText(self._status_default_text), e.Skip()))
     
     def _bind_hints(self):
         self._bind_statusbar_hint(
@@ -799,6 +939,9 @@ class MainFrame(BaseMainFrame):
 
     def on_find_optimum(self, event):
         """Поиск оптимального набора точек."""
+        if self._params_mode != "fitted":
+            self._exit_calculator_mode()
+
         pairs = self._get_current_pairs_from_grid()
         if len(pairs) < 3:
             wx.MessageBox(

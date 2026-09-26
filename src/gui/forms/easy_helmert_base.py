@@ -302,10 +302,10 @@ class BaseMainFrame ( wx.Frame ):
         self.m_btn_calc.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
         bSizer30.Add( self.m_btn_calc, 1, wx.ALL|wx.FIXED_MINSIZE|wx.EXPAND, 5 )
 
-        self.m_btn_find_optimal = wx.Button( self.m_scrolledWindow_settings, wx.ID_ANY, u"НАЙТИ ОПТИМУМ", wx.DefaultPosition, wx.Size( -1,-1 ), wx.BU_EXACTFIT )
+        self.m_btn_mode = wx.Button( self.m_scrolledWindow_settings, wx.ID_ANY, u"РЕЖИМ: МНК ПО ТОЧКАМ ▾", wx.DefaultPosition, wx.Size( -1,-1 ), wx.BU_EXACTFIT )
 
-        self.m_btn_find_optimal.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
-        bSizer30.Add( self.m_btn_find_optimal, 1, wx.ALL|wx.EXPAND, 5 )
+        self.m_btn_mode.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_GO_FORWARD,  ) )
+        bSizer30.Add( self.m_btn_mode, 1, wx.ALL|wx.EXPAND, 5 )
 
 
         bSizerGridSettings.Add( bSizer30, 0, wx.EXPAND, 5 )
@@ -336,6 +336,14 @@ class BaseMainFrame ( wx.Frame ):
         self.m_lbl_result.SetFont( wx.Font( wx.NORMAL_FONT.GetPointSize(), wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, False, wx.EmptyString ) )
 
         bSizerResultHeader.Add( self.m_lbl_result, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
+
+
+        bSizerResultHeader.Add( ( 0, 0), 1, wx.EXPAND, 5 )
+
+        self.m_btn_save_preset = wx.Button( self.m_panel_result, wx.ID_ANY, u"Сохранить параметры в БД", wx.DefaultPosition, wx.Size( -1,-1 ), 0 )
+        self.m_btn_save_preset.SetToolTip( u"Сохранить текущие параметры перехода в пользовательскую БД" )
+
+        bSizerResultHeader.Add( self.m_btn_save_preset, 0, wx.ALIGN_CENTER_VERTICAL|wx.ALL, 5 )
 
 
         bSizerResult.Add( bSizerResultHeader, 0, wx.EXPAND, 5 )

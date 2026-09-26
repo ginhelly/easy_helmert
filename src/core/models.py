@@ -110,6 +110,20 @@ class TransformationParams(BaseModel):
 
     # ── Форматирование с учётом настроек отображения ─────────────────────────
 
+    def inverted(self) -> "TransformationParams":
+        """
+        Параметры обратного преобразования (target -> source), приближённо:
+        знакосмена всех 7 величин. Та же аппроксимация, что уже используется
+        в as_display() для HelmertDirection.INVERSE — точна до O(r^2, dS^2),
+        для геодезических задач погрешность < 1e-12 м. Операция инволютивна:
+        applied twice returns to the original params.
+        """
+        return self.model_copy(update={
+            "dx": -self.dx, "dy": -self.dy, "dz": -self.dz,
+            "rx": -self.rx, "ry": -self.ry, "rz": -self.rz,
+            "scale": 1.0 - self.ds_raw,
+        })
+
     def as_display(self, s: DisplaySettings) -> "HelmertDisplay":
         """
         Возвращает параметры в единицах и конвенции, заданных DisplaySettings.
@@ -193,7 +207,7 @@ class HelmertDisplay(BaseModel):
     rms_enu_sigma0: float
     rms_enu_active: float
 
-    def to_text(self) -> str:
+    def to_text(self, include_rms: bool = True) -> str:
         geoid_block = ""
         if self.geoid_src_note:
             geoid_block += f"  {self.geoid_src_note}\n"
@@ -201,6 +215,14 @@ class HelmertDisplay(BaseModel):
             geoid_block += f"  {self.geoid_tgt_note}\n"
         if self.geoid_warn_note:
             geoid_block += f"  {self.geoid_warn_note}\n"
+
+        rms_block = (
+            f"\n"
+            f"  СКО (ECEF) = {self.rms_cm:.2f} см\n"
+            f"  СКО (ENU, только по вкл. точкам) = {self.rms_enu_active:.4f} см\n"
+            f"  СКО_контр. (ENU) = {self.rms_enu:.4f} см\n"
+            f"  СКО_апост. (ENU) = {self.rms_enu_sigma0:.4f} см"
+        ) if include_rms else ""
 
         return (
             f"  Метод:       {self.method_label}\n"
@@ -213,12 +235,8 @@ class HelmertDisplay(BaseModel):
             f"  rX = {self.rx:+.8f} {self.rot_label}\n"
             f"  rY = {self.ry:+.8f} {self.rot_label}\n"
             f"  rZ = {self.rz:+.8f} {self.rot_label}\n"
-            f"  dS = {self.sc_fmt}{self.sc_label}\n"
-            f"\n"
-            f"  СКО (ECEF) = {self.rms_cm:.2f} см\n"
-            f"  СКО (ENU, только по вкл. точкам) = {self.rms_enu_active:.4f} см\n"
-            f"  СКО_контр. (ENU) = {self.rms_enu:.4f} см\n"
-            f"  СКО_апост. (ENU) = {self.rms_enu_sigma0:.4f} см"
+            f"  dS = {self.sc_fmt}{self.sc_label}"
+            f"{rms_block}"
         )
 
 

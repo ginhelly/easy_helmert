@@ -196,6 +196,25 @@ def describe_crs(crs: CRS) -> str:
 
     return "\n".join(lines)
 
+def short_crs_description(crs: CRS) -> str:
+    """
+    Краткое однострочное описание СК с эллипсоидом — для авто-подсказки
+    описания при сохранении пресета параметров в пользовательскую БД.
+    Пример: "Pulkovo 1942 (эллипсоид Krassovsky 1940, a=6378245.000, 1/f=298.300000000)"
+    """
+    display = crs.source_crs if crs.type_name == "Bound CRS" else crs
+    name = display.name
+    try:
+        ell = display.geodetic_crs.ellipsoid
+        return (
+            f"{name} (эллипсоид {ell.name}, "
+            f"a={ell.semi_major_metre:.3f}, "
+            f"1/f={ell.inverse_flattening:.9f})"
+        )
+    except Exception:
+        return name
+
+
 def make_helmert_transformer(
     source_crs: CRS,
     target_crs: CRS,

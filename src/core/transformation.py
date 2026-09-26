@@ -297,6 +297,66 @@ def calculate_helmert(
         residuals_enu = enu,
     )
 
+def apply_helmert(
+    pairs:      List[PointPair],
+    source_crs: CRS,
+    target_crs: CRS,
+    params:     TransformationParams,
+) -> CalculationResult:
+    """
+    Как calculate_helmert(), но без МНК: параметры заданы извне (импортированы
+    вручную или взяты из пользовательской БД пресетов). Считает по ним невязки
+    для текущих pairs — работает и с пустым списком точек (rms_error=0.0).
+    """
+    src_ecef = _to_ecef(pairs, source=True,  crs=source_crs)
+    tgt_ecef = _to_ecef(pairs, source=False, crs=target_crs)
+
+    raw = [
+        params.dx, params.dy, params.dz,
+        params.rx, params.ry, params.rz,
+        params.ds_raw,
+    ]
+
+    active_mask = np.array([
+        p.enabled_plan or p.enabled_h for p in pairs
+    ], dtype=bool)
+
+    if len(pairs) > 0 and active_mask.any():
+        pred_ecef = helmert_forward(src_ecef, *raw)
+        ecef_rmse = float(np.sqrt(
+            np.mean((pred_ecef[active_mask] - tgt_ecef[active_mask]) ** 2)
+        ))
+    else:
+        ecef_rmse = 0.0
+
+    result_params = params.model_copy(update={"rms_error": ecef_rmse})
+
+    residuals = _residuals(pairs, src_ecef, tgt_ecef, raw)
+
+    from utils.crs_utils import compute_metric_residuals
+
+    try:
+        enu = compute_metric_residuals(
+            [p.x1        for p in pairs],
+            [p.y1        for p in pairs],
+            [p.h1 or 0.0 for p in pairs],
+            [p.x2        for p in pairs],
+            [p.y2        for p in pairs],
+            [p.h2 or 0.0 for p in pairs],
+            source_crs = source_crs,
+            target_crs = target_crs,
+            params     = result_params,
+        )
+    except Exception:
+        enu = [(0.0, 0.0, 0.0)] * len(pairs)
+
+    return CalculationResult(
+        params        = result_params,
+        residuals     = residuals,
+        residuals_enu = enu,
+    )
+
+
 def compute_rms_enu_active(
     pairs: List[PointPair],
     residuals_enu: List[Tuple[float, float, float]],

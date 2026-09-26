@@ -22,6 +22,7 @@ from pyproj import CRS, Transformer
 from .models import PointPair, CalculationResult, TransformationParams
 from .transformation import (
     calculate_helmert,
+    apply_helmert,
     base_crs,
     ellipsoid,
     blh_to_ecef,
@@ -412,21 +413,24 @@ def _apply_geoid(
     return h
 
 
-# ── Публичный API ─────────────────────────────────────────────────────────────
-
-def calculate_helmert_with_geoid(
+def _correct_heights_for_geoid(
     pairs:            List[PointPair],
     source_crs:       CRS,
     target_crs:       CRS,
+    local_crs:        CRS,
+    wgs84_crs:        CRS,
+    naive_params:     TransformationParams,   # local -> WGS-84
     src_action:       GeoidAction,
     tgt_action:       GeoidAction,
-    apply_correction: bool = False,
-) -> Tuple[CalculationResult, GeoidCorrectionInfo]:
+    apply_correction: bool,
+) -> Tuple[List[PointPair], GeoidCorrectionInfo]:
+    """
+    Общая часть calculate_helmert_with_geoid()/apply_helmert_with_geoid():
+    сэмплирует EGM2008, считает поправку Балтика<->EGM2008 и применяет её
+    к высотам точек. naive_params нужен только чтобы перевести точки в
+    WGS-84 для выборки геоида — не влияет на финальный расчёт параметров.
+    """
     geoid_path = _find_geoid_path()
-    local_crs, wgs84_crs = _split_local_wgs84(source_crs, target_crs)
-    naive_params = _naive_local_to_wgs84(
-        pairs, source_crs, target_crs, local_crs, wgs84_crs
-    )
 
     n          = len(pairs)
     corrected  = list(pairs)
@@ -530,14 +534,59 @@ def calculate_helmert_with_geoid(
             if h_corr is not None:
                 tgt_display[i] = (h_corr, n_val)
 
-    # Шаг 7: финальный расчёт по скорректированным высотам
-    result     = calculate_helmert(corrected, source_crs, target_crs)
     geoid_info = GeoidCorrectionInfo(
         src             = src_display,
         tgt             = tgt_display,
         delta_zeta_mean = delta_zeta_mean,
-        naive_params=naive_params
+        naive_params    = naive_params,
     )
+    return corrected, geoid_info
+
+
+# ── Публичный API ─────────────────────────────────────────────────────────────
+
+def calculate_helmert_with_geoid(
+    pairs:            List[PointPair],
+    source_crs:       CRS,
+    target_crs:       CRS,
+    src_action:       GeoidAction,
+    tgt_action:       GeoidAction,
+    apply_correction: bool = False,
+) -> Tuple[CalculationResult, GeoidCorrectionInfo]:
+    local_crs, wgs84_crs = _split_local_wgs84(source_crs, target_crs)
+    naive_params = _naive_local_to_wgs84(
+        pairs, source_crs, target_crs, local_crs, wgs84_crs
+    )
+    corrected, geoid_info = _correct_heights_for_geoid(
+        pairs, source_crs, target_crs, local_crs, wgs84_crs,
+        naive_params, src_action, tgt_action, apply_correction,
+    )
+    result = calculate_helmert(corrected, source_crs, target_crs)
+    return result, geoid_info
+
+
+def apply_helmert_with_geoid(
+    pairs:            List[PointPair],
+    source_crs:       CRS,
+    target_crs:       CRS,
+    params:           TransformationParams,
+    src_action:       GeoidAction,
+    tgt_action:       GeoidAction,
+    apply_correction: bool = False,
+) -> Tuple[CalculationResult, GeoidCorrectionInfo]:
+    """
+    Как calculate_helmert_with_geoid(), но параметры заданы извне (импорт /
+    пользовательская БД), без МНК на финальном шаге. naive_params для выборки
+    геоида берётся из уже готовых params (при необходимости — приближённо
+    инвертированных), а не из отдельной подгонки по точкам.
+    """
+    local_crs, wgs84_crs = _split_local_wgs84(source_crs, target_crs)
+    naive_params = params if crs_is_wgs84_related(target_crs) else params.inverted()
+    corrected, geoid_info = _correct_heights_for_geoid(
+        pairs, source_crs, target_crs, local_crs, wgs84_crs,
+        naive_params, src_action, tgt_action, apply_correction,
+    )
+    result = apply_helmert(corrected, source_crs, target_crs, params)
     return result, geoid_info
 
 
