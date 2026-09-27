@@ -67,7 +67,6 @@ class MainFrame(BaseMainFrame):
                 self.m_chk_correction.IsEnabled() and self.m_chk_correction.GetValue()
             ),
             set_delta_zeta_mean=lambda v: setattr(self, "_last_delta_zeta_mean", v),
-            update_results_view=self.update_results,
             get_threshold_m=self._get_threshold_m,
             autofill_missing_coordinates=self._autofill_missing_coordinates,
             mark_modified=self._mark_modified,
@@ -299,6 +298,7 @@ class MainFrame(BaseMainFrame):
         self.point_pairs = run_out.pairs
         self._last_all_residuals = run_out.all_residuals
         self._last_all_metric = run_out.all_metric
+        self.update_results(self.calc_result)
 
     # ── Режим источника параметров ───────────────────────────────────────────
 
@@ -344,6 +344,7 @@ class MainFrame(BaseMainFrame):
             self.point_pairs = run_out.pairs
             self._last_all_residuals = run_out.all_residuals
             self._last_all_metric = run_out.all_metric
+            self.update_results(self.calc_result)
 
     def _on_mode_button(self, event):
         # Обычные (не радио-) пункты меню — сознательно: AppendRadioItem на
@@ -851,8 +852,15 @@ class MainFrame(BaseMainFrame):
             raw_items, self.source_crs, self.target_crs, self.calc_result
         )
 
+        src_action, tgt_action = self._read_geoid_actions()
+
         dlg = MapDialog(self)
         dlg.set_points(src_points, tgt_points, "Точки калибровки")
+        dlg.set_transform_context(
+            self.source_crs, self.target_crs, self.calc_result.params,
+            src_action=src_action, tgt_action=tgt_action,
+            delta_zeta_mean=getattr(self, "_last_delta_zeta_mean", None),
+        )
         dlg.ShowModal()
         dlg.Destroy()
 

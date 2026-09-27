@@ -1017,15 +1017,17 @@ class CoordinateGrid(gridlib.Grid):
     
     def update_geoid_heights(
         self,
-        src_info: List[Optional[Tuple[float, float]]],
-        tgt_info: List[Optional[Tuple[float, float]]],
+        src_info: List[Optional[Tuple[float, ...]]],
+        tgt_info: List[Optional[Tuple[float, ...]]],
     ):
         """
         Обновить столбцы «H исх. скорр.» и «H опорн. скорр.».
 
         src_info[i] / tgt_info[i]:
-        (h_corrected, n_geoid) — показывает «120.4530 (ζ=+28.1234)»
-        None                   — ячейка пуста (серый фон)
+        (h_corrected, n_geoid)           — показывает «120.4530 (ζ=+28.1234)»
+        (h_corrected, n_geoid, n_global) — DEBUG-режим геоида: доп. «глобальная»
+                                            ондуляция для сравнения
+        None                             — ячейка пуста (серый фон)
         """
         for col, info_list in (
             (_Col.H1_CORR, src_info),
@@ -1037,6 +1039,13 @@ class CoordinateGrid(gridlib.Grid):
                 if info is None:
                     self.SetCellValue(row, col, "")
                     self.SetCellBackgroundColour(row, col, _CLR_NA)
+                elif len(info) == 3:
+                    # DEBUG: третий элемент — ондуляция по жёстко заданному
+                    # "глобальному" эталону (см. core/geoid_correction.py),
+                    # только для сравнения с локальным МНК, временно.
+                    h_corr, n_geoid, n_global = info
+                    self.SetCellValue(row, col, f"{h_corr:.4f} (ζ={n_geoid:+.4f} | {n_global:+.4f} <ГЛОБ.>)")
+                    self.SetCellBackgroundColour(row, col, _CLR_GEOID)
                 else:
                     h_corr, n_geoid = info
                     self.SetCellValue(row, col, f"{h_corr:.4f} (ζ={n_geoid:+.4f})")

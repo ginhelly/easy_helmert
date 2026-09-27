@@ -57,6 +57,33 @@ __MAPLIBRE_CSS__
       color: #111;
       line-height: 1.3;
     }
+
+    .legend-deviation {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      z-index: 10;
+      background: rgba(255,255,255,.95);
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.35;
+      min-width: 200px;
+      display: none;
+    }
+    .legend-deviation .grad-bar {
+      height: 14px;
+      border-radius: 4px;
+      margin: 6px 0 2px;
+      border: 1px solid rgba(0,0,0,.15);
+    }
+    .legend-deviation .grad-range {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #333;
+    }
   </style>
 </head>
 <body>
@@ -68,6 +95,15 @@ __MAPLIBRE_CSS__
     <div><span class="dot tgt"></span>Опорные точки</div>
     <div><span class="dot" style="background:#f4633a;"></span>Территория калибровки</div>
     <div class="small" id="attribution-extra"></div>
+  </div>
+
+  <div class="legend-deviation" id="deviationLegend">
+    <div><strong id="devLegendTitle"></strong></div>
+    <div class="grad-bar" id="devLegendGradient"></div>
+    <div class="grad-range">
+      <span id="devLegendMin"></span>
+      <span id="devLegendMax"></span>
+    </div>
   </div>
 
   <div class="ctrl">
@@ -607,7 +643,132 @@ __GEOGRAPHICLIB_JS__
         filter: ["==", ["get", "kind"], "label"],
       });
 
+      // ===== КАРТА ОТКЛОНЕНИЙ (deviation grid) =====
+      map.addSource("deviation", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+
+      map.addLayer({
+        id: "deviation-fill",
+        type: "fill",
+        source: "deviation",
+        paint: {
+          "fill-color": "#888888",
+          "fill-opacity": 0.65,
+          "fill-outline-color": "rgba(0,0,0,0.35)"
+        }
+      });
+
+      map.addLayer({
+        id: "deviation-labels",
+        type: "symbol",
+        source: "deviation",
+        layout: {
+          "text-field": ["get", "label_mag"],
+          "text-size": 11,
+          "text-allow-overlap": false,
+          "text-font": ["Open Sans Bold", "Noto Sans Bold"]
+        },
+        paint: {
+          "text-color": "#000000",
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1.3,
+          "text-halo-blur": 0.3
+        }
+      });
+
       refreshRulerLayer();
+    });
+
+    // ===== КАРТА ОТКЛОНЕНИЙ: мост Python <-> JS =====
+    let deviationModeOn = false;
+    let deviationMoveTimer = null;
+    let lastDeviationGeojson = null;
+
+    // Красный -> оранжевый -> жёлтый -> зелёный -> синий -> фиолетовый
+    const DEVIATION_COLOR_STOPS = ["#d32f2f", "#f57c00", "#fbc02d", "#388e3c", "#1976d2", "#7b1fa2"];
+    const DEVIATION_MODE_LABELS = { mag: "Модуль |Δ|", dE: "По E", dN: "По N", dU: "По U" };
+
+    function deviationMinMax(mode, geojson) {
+      const values = (geojson.features || [])
+        .map(f => Number(f.properties && f.properties[mode]))
+        .filter(Number.isFinite);
+      if (values.length === 0) return null;
+      return { min: Math.min(...values), max: Math.max(...values) };
+    }
+
+    function buildColorExpression(mode, minMax) {
+      if (!minMax) return "#888888";
+      const { min, max } = minMax;
+      if (min === max) {
+        // однородное поле (напр. текущие == опорные параметры) - один цвет
+        return DEVIATION_COLOR_STOPS[0];
+      }
+      const n = DEVIATION_COLOR_STOPS.length;
+      const expr = ["interpolate", ["linear"], ["get", mode]];
+      for (let i = 0; i < n; i++) {
+        expr.push(min + (max - min) * (i / (n - 1)));
+        expr.push(DEVIATION_COLOR_STOPS[i]);
+      }
+      return expr;
+    }
+
+    function updateDeviationLegend(mode, minMax) {
+      const el = document.getElementById("deviationLegend");
+      if (!el) return;
+      if (!minMax) {
+        el.style.display = "none";
+        return;
+      }
+      document.getElementById("devLegendTitle").textContent =
+        "Отклонение: " + (DEVIATION_MODE_LABELS[mode] || mode);
+      document.getElementById("devLegendGradient").style.background =
+        "linear-gradient(to right, " + DEVIATION_COLOR_STOPS.join(", ") + ")";
+      document.getElementById("devLegendMin").textContent = minMax.min.toFixed(2) + " м";
+      document.getElementById("devLegendMax").textContent = minMax.max.toFixed(2) + " м";
+      el.style.display = "block";
+    }
+
+    window.setDeviationGrid = function (geojson, mode) {
+      lastDeviationGeojson = geojson;
+      const src = map.getSource("deviation");
+      if (!src || !map.getLayer("deviation-fill") || !map.getLayer("deviation-labels")) return;
+      src.setData(geojson);
+      const minMax = deviationMinMax(mode, geojson);
+      map.setPaintProperty("deviation-fill", "fill-color", buildColorExpression(mode, minMax));
+      map.setLayoutProperty("deviation-labels", "text-field", ["get", "label_" + mode]);
+      updateDeviationLegend(mode, minMax);
+    };
+
+    window.clearDeviationGrid = function () {
+      lastDeviationGeojson = null;
+      const src = map.getSource("deviation");
+      if (src) src.setData({ type: "FeatureCollection", features: [] });
+      const el = document.getElementById("deviationLegend");
+      if (el) el.style.display = "none";
+    };
+
+    function reportBoundsToPython() {
+      if (!deviationModeOn || !window.pyBridge) return;
+      const b = map.getBounds();
+      window.pyBridge.postMessage(JSON.stringify({
+        west: b.getWest(), south: b.getSouth(),
+        east: b.getEast(), north: b.getNorth(),
+      }));
+    }
+
+    window.setDeviationModeEnabled = function (on) {
+      deviationModeOn = !!on;
+      if (deviationModeOn) {
+        reportBoundsToPython();
+      }
+    };
+
+    map.on("moveend", () => {
+      if (!deviationModeOn) return;
+      if (deviationMoveTimer) clearTimeout(deviationMoveTimer);
+      deviationMoveTimer = setTimeout(reportBoundsToPython, 1000);
     });
 
     const bmSelect = document.getElementById("basemapSelect");

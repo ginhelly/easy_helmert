@@ -3,17 +3,27 @@
 from __future__ import annotations
 import wx
 
+from utils.debug_flags import (
+    enable_geoid_debug, is_geoid_debug_enabled,
+    is_using_global_undulation_for_calc, set_use_global_undulation_for_calc,
+)
+
+_EASTER_EGG_CLICKS = 5
+
 
 class AboutDialog(wx.Dialog):
 
     def __init__(self, parent: wx.Window):
         super().__init__(parent, title="О программе", style=wx.DEFAULT_DIALOG_STYLE)
+        self._title_click_count = 0
         self._build_ui()
         self.Centre()
 
     def _build_ui(self):
         panel = wx.Panel(self)
         main  = wx.BoxSizer(wx.VERTICAL)
+        self._panel = panel
+        self._main_sizer = main
 
         # ── Название ─────────────────────────────────────────────────────────
         title_font = self.GetFont()
@@ -22,6 +32,7 @@ class AboutDialog(wx.Dialog):
 
         lbl_title = wx.StaticText(panel, label="Easy Helmert v0.9.2")
         lbl_title.SetFont(title_font)
+        lbl_title.Bind(wx.EVT_LEFT_DOWN, self._on_title_click)
 
         sub_font = self.GetFont()
         sub_font.SetPointSize(9)
@@ -63,6 +74,17 @@ class AboutDialog(wx.Dialog):
 
         main.Add(wx.StaticLine(panel), 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 12)
 
+        # ── Секретный debug-переключатель (виден только в debug-режиме) ────────
+        self.chk_use_global_undulation = wx.CheckBox(
+            panel,
+            label="Использовать при расчётах ондуляции высот, "
+                  "рассчитанные по захардкоженным параметрам",
+        )
+        self.chk_use_global_undulation.SetValue(is_using_global_undulation_for_calc())
+        self.chk_use_global_undulation.Bind(wx.EVT_CHECKBOX, self._on_toggle_use_global)
+        self.chk_use_global_undulation.Show(is_geoid_debug_enabled())
+        main.Add(self.chk_use_global_undulation, 0, wx.ALIGN_CENTRE | wx.ALL, 8)
+
         # ── Кнопка ───────────────────────────────────────────────────────────
         btn_ok = wx.Button(panel, wx.ID_OK, "Закрыть")
         btn_ok.SetDefault()
@@ -70,3 +92,24 @@ class AboutDialog(wx.Dialog):
 
         panel.SetSizer(main)
         main.Fit(self)
+
+    def _on_title_click(self, event):
+        event.Skip()
+        self._title_click_count += 1
+        if self._title_click_count >= _EASTER_EGG_CLICKS:
+            self._title_click_count = 0
+            enable_geoid_debug()
+            self.chk_use_global_undulation.Show(True)
+            self._panel.Layout()
+            self._main_sizer.Fit(self)
+            wx.MessageBox(
+                "Debug-режим геоида включён: рядом со скорректированными высотами "
+                "будет показана ондуляция по жёстко заданному \"глобальному\" эталону "
+                "(СК-42 → WGS-84, ГОСТ 32453-2017) для сравнения с локальным МНК.\n\n"
+                "Действует до перезапуска приложения.",
+                "Debug-режим", wx.OK | wx.ICON_INFORMATION, self,
+            )
+
+    def _on_toggle_use_global(self, event):
+        set_use_global_undulation_for_calc(self.chk_use_global_undulation.GetValue())
+        event.Skip()

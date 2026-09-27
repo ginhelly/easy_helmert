@@ -8,6 +8,28 @@ core/geoid_correction.py — расчёт 7 параметров с поправ
   4. Ондуляции на эллипсоиде нужной СК — обратный Гельмерт local→WGS84
   5. Коррекция высот (прибавить / вычесть / ничего)
   6. Финальный расчёт с откорректированными высотами
+
+ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ (непочиненное): наивные параметры из шага 1 считаются
+по ЕЩЁ НЕ скорректированным (табличным/ортометрическим) высотам — если
+ондуляция геоида заметно меняется по площади сети точек, эта черновая
+оценка может заметно разойтись с "истинными" параметрами, и коррекция высот
+на шаге 5 (посчитанная по ней) унаследует эту ошибку.
+
+Пробовал чинить в рамках самой сессии двумя способами — (а) один решатель
+least_squares, где функция невязки на каждом шаге пересчитывает поправку
+геоида под пробуемый им же p, и (б) итеративное уточнение (обычный МНК →
+скорректировать высоты новыми параметрами → снова МНК → ... до сходимости).
+ОБА варианта отклонены: на контрольном тесте (сеть, где обычный
+calculate_helmert() без геоида восстанавливает истинные параметры с
+точностью ~1e-9) оба сходились к геометрически неверному (ошибка в
+параметрах — десятки метров), но "идеально самосогласованному" (finalное
+СКО ~0.0002 см) решению. Причина: _undulation_on_ellipsoid — полноценное 3D
+обратное преобразование Гельмерта, а не просто выборка растра; если
+стартовая (наивная) оценка параметров уже заметно смещена — то есть именно
+в том случае, ради которого всё и затевалось, — эта самокоррекция не
+восстанавливает верный ответ, а стабилизируется на ложном самосогласованном
+фиксированном значении. Подробности и числа — см. связанную задачу в
+очереди задач проекта.
 """
 from __future__ import annotations
 
@@ -19,6 +41,7 @@ import re
 import numpy as np
 from pyproj import CRS, Transformer
 
+from .constants import ARCSEC_TO_RAD
 from .models import PointPair, CalculationResult, TransformationParams
 from .transformation import (
     calculate_helmert,
@@ -28,12 +51,23 @@ from .transformation import (
     blh_to_ecef,
     ecef_to_blh,
 )
+from utils.debug_flags import is_geoid_debug_enabled, is_using_global_undulation_for_calc
 
 # ── Константы WGS-84 ──────────────────────────────────────────────────────────
 
 _WGS84_A    = 6378137.0
 _WGS84_INVF = 298.257223563
 _WGS84_F    = 1.0 / _WGS84_INVF
+
+# DEBUG (временно, удалить после проверки): жёстко заданный "глобальный" эталон
+# СК-42 -> WGS-84 (ГОСТ 32453-2017, канонический Position Vector) — для сравнения
+# с naive_params, посчитанными локальным МНК по текущим точкам. Включается
+# скрытым способом (5 кликов по заголовку в "О программе") — см. utils/debug_flags.py.
+_DEBUG_GLOBAL_NAIVE_PARAMS = TransformationParams(
+    dx=23.57, dy=-140.95, dz=-79.80,
+    rx=0.0, ry=0.35 * ARCSEC_TO_RAD, rz=0.79 * ARCSEC_TO_RAD,
+    scale=1.0 - 0.22e-6,
+)
 
 # Имя датума WGS-84: "WGS 84", "WGS84", "World Geodetic System 1984"
 # Negative lookbehind (?<!\w) отсекает "towgs84" — там перед "wgs" стоит буква "o"
@@ -67,11 +101,14 @@ class GeoidCorrectionInfo:
     Индексы совпадают с исходным списком pairs.
 
     src[i] / tgt[i]:
-      (h_corrected, n_geoid) — высота после поправки и ондуляция, или
-      None                   — высота не задана / поправка не применялась.
+      (h_corrected, n_geoid)              — высота после поправки и ондуляция, или
+      (h_corrected, n_geoid, n_global)    — то же + DEBUG: ондуляция по жёстко
+                                             заданному "глобальному" эталону
+                                             (только когда включён debug-режим геоида), или
+      None                                — высота не задана / поправка не применялась.
     """
-    src: List[Optional[Tuple[float, float]]] = _dc_field(default_factory=list)
-    tgt: List[Optional[Tuple[float, float]]] = _dc_field(default_factory=list)
+    src: List[Optional[Tuple[float, ...]]] = _dc_field(default_factory=list)
+    tgt: List[Optional[Tuple[float, ...]]] = _dc_field(default_factory=list)
     delta_zeta_mean: Optional[float] = None
     naive_params: Optional[TransformationParams] = None
 
@@ -357,15 +394,10 @@ def _undulation_on_ellipsoid(
     a_crs, f_crs = ellipsoid(b)
 
     # Шаг 2: геоид (WGS-84 BLH) → WGS-84 ECEF
-    print('--- ПРЕОБРАЗУЕМ ВЫСОТЫ ГЕОИДА ---')
-    print('    BLH_WGS')
-    for B, L, H in zip(lats_wgs, lons_wgs, n_wgs):
-        print('    ', B, L, H)
     ecef_wgs = blh_to_ecef(
         np.deg2rad(lats_wgs), np.deg2rad(lons_wgs), n_wgs,
         _WGS84_A, _WGS84_F,
     )
-    print('    ECEF_WGS', ecef_wgs)
 
     # Шаг 3: обратный Гельмерт (линеаризован; точность sub-мкм при геодезических углах)
     # Forward (local→WGS84): X_wgs = M · R · X_local + T
@@ -386,17 +418,60 @@ def _undulation_on_ellipsoid(
     ])
 
     ecef_local = (1.0 / M) * (ecef_wgs - T[np.newaxis, :]) @ R
-    print('    ECEF_LOCAL', ecef_local)
 
     # Шаг 4: ECEF → BLH на эллипсоиде CRS
     b_local, l_local, h_local = ecef_to_blh(
         ecef_local[:, 0], ecef_local[:, 1], ecef_local[:, 2],
         a_crs, f_crs,
     )
-    print('    BLH_LOCAL')
-    for B, L, H in zip(b_local, l_local, h_local):
-        print('   ', np.rad2deg(B), np.rad2deg(L), np.rad2deg(H))
     return np.asarray(h_local, float)
+
+
+# ── Публичный хелпер: ондуляция по произвольному naive_params ────────────────
+
+def sample_undulation(
+    xs, ys, hs,
+    given_crs: CRS,
+    local_crs: CRS,
+    wgs84_crs: CRS,
+    naive_params: TransformationParams,
+    geoid_path: Optional[str] = None,
+) -> np.ndarray:
+    """
+    Ондуляция геоида EGM2008 на эллипсоиде given_crs для точек, заданных в
+    given_crs: перепроецирование в WGS-84 по naive_params, выборка растра,
+    обратное 3D-преобразование на эллипсоид given_crs. Публичный —
+    используется и основным расчётом (см. _debug_global_undulation), и
+    внешними потребителями для "одностороннего" применения геоид-коррекции
+    вне полного пайплайна calculate_helmert_with_geoid (например, картой
+    отклонений в gui/utils/deviation_grid.py).
+    """
+    if geoid_path is None:
+        geoid_path = _find_geoid_path()
+    lons, lats = _wgs84_lonlat_for(xs, ys, hs, given_crs, local_crs, wgs84_crs, naive_params)
+    n_wgs = _sample_egm2008(lons, lats, geoid_path)
+    return _undulation_on_ellipsoid(lons, lats, n_wgs, given_crs, naive_params)
+
+
+# ── DEBUG: полностью самостоятельный расчёт по "глобальному" эталону ────────
+
+def _debug_global_undulation(
+    xs, ys, hs,
+    given_crs: CRS,
+    local_crs: CRS,
+    wgs84_crs: CRS,
+    geoid_path: str,
+) -> np.ndarray:
+    """
+    Ондуляция геоида на эллипсоиде given_crs, посчитанная ЦЕЛИКОМ по
+    захардкоженным "глобальным" параметрам _DEBUG_GLOBAL_NAIVE_PARAMS —
+    ни на одном шаге не используется naive_params основного расчёта, чтобы
+    не смешивать два разных набора параметров перехода в одном контрольном
+    значении. Тонкая обёртка над sample_undulation().
+    """
+    return sample_undulation(
+        xs, ys, hs, given_crs, local_crs, wgs84_crs, _DEBUG_GLOBAL_NAIVE_PARAMS, geoid_path,
+    )
 
 
 # ── Применение поправки к высоте ─────────────────────────────────────────────
@@ -453,6 +528,19 @@ def _correct_heights_for_geoid(
         n_src     = _undulation_on_ellipsoid(
             lons_src, lats_src, n_wgs_src, source_crs, naive_params
         )
+        # DEBUG: полностью самостоятельный расчёт по жёстко заданным
+        # "глобальным" параметрам — от перепроецирования в WGS-84 до выборки
+        # геоида и обратного 3D-преобразования; НЕ переиспользует lons_src/
+        # lats_src/n_wgs_src основного расчёта (те посчитаны по naive_params),
+        # чтобы не смешивать два разных набора параметров перехода.
+        n_src_global = None
+        if is_geoid_debug_enabled():
+            n_src_global = _debug_global_undulation(
+                [p.x1        for p in pairs],
+                [p.y1        for p in pairs],
+                [p.h1 or 0.0 for p in pairs],
+                source_crs, local_crs, wgs84_crs, geoid_path,
+            )
 
     # ── EGM2008 для опорных точек ─────────────────────────────────────────────
     # Нужно и при tgt_action != NOTHING, и при apply_correction + tgt_action==ADD
@@ -468,6 +556,16 @@ def _correct_heights_for_geoid(
         n_tgt_arr = _undulation_on_ellipsoid(
             lons_tgt, lats_tgt, n_wgs_tgt, target_crs, naive_params
         )
+        # DEBUG: см. комментарий у n_src_global выше — тот же принцип,
+        # полностью самостоятельный расчёт, без смешивания с naive_params.
+        n_tgt_global = None
+        if is_geoid_debug_enabled():
+            n_tgt_global = _debug_global_undulation(
+                [p.x2        for p in pairs],
+                [p.y2        for p in pairs],
+                [p.h2 or 0.0 for p in pairs],
+                target_crs, local_crs, wgs84_crs, geoid_path,
+            )
 
     # ── Поправка среднего расхождения Балтика ↔ EGM2008 ─────────────────────
     # Условия: флаг включён + src_action==ADD + target связан с WGS-84
@@ -518,21 +616,36 @@ def _correct_heights_for_geoid(
     # Шаг 6: H_corr = H_source + ζ'(EGM на реф. эллипс.) + Δζ_mean
     if src_action != GeoidAction.NOTHING and n_src is not None:
         dz = delta_zeta_mean if delta_zeta_mean is not None else 0.0
+        # DEBUG: секретный переключатель ("О программе") — если включён,
+        # для РЕАЛЬНОГО расчёта (и значит для финальных параметров МНК)
+        # используется не naive-ондуляция, а n_src_global.
+        use_global = n_src_global is not None and is_using_global_undulation_for_calc()
         for i, p in enumerate(corrected):
-            n_eff  = float(n_src[i]) + dz      # суммарная поправка
-            h_corr = _apply_geoid(p.h1, n_eff, src_action)
+            n_eff_local  = float(n_src[i]) + dz
+            n_eff_global = float(n_src_global[i]) + dz if n_src_global is not None else None
+            n_eff_used   = n_eff_global if use_global else n_eff_local
+            h_corr = _apply_geoid(p.h1, n_eff_used, src_action)
             corrected[i] = corrected[i].model_copy(update={"h1": h_corr})
             if h_corr is not None:
-                src_display[i] = (h_corr, n_eff)
+                if n_eff_global is not None:
+                    src_display[i] = (h_corr, n_eff_local, n_eff_global)
+                else:
+                    src_display[i] = (h_corr, n_eff_local)
 
     # ── Применение поправки к опорным высотам ────────────────────────────────
     if tgt_action != GeoidAction.NOTHING and n_tgt_arr is not None:
+        use_global = n_tgt_global is not None and is_using_global_undulation_for_calc()
         for i, p in enumerate(corrected):
-            n_val  = float(n_tgt_arr[i])
-            h_corr = _apply_geoid(p.h2, n_val, tgt_action)
+            n_val_local  = float(n_tgt_arr[i])
+            n_val_global = float(n_tgt_global[i]) if n_tgt_global is not None else None
+            n_val_used   = n_val_global if use_global else n_val_local
+            h_corr = _apply_geoid(p.h2, n_val_used, tgt_action)
             corrected[i] = corrected[i].model_copy(update={"h2": h_corr})
             if h_corr is not None:
-                tgt_display[i] = (h_corr, n_val)
+                if n_val_global is not None:
+                    tgt_display[i] = (h_corr, n_val_local, n_val_global)
+                else:
+                    tgt_display[i] = (h_corr, n_val_local)
 
     geoid_info = GeoidCorrectionInfo(
         src             = src_display,
@@ -553,6 +666,23 @@ def calculate_helmert_with_geoid(
     tgt_action:       GeoidAction,
     apply_correction: bool = False,
 ) -> Tuple[CalculationResult, GeoidCorrectionInfo]:
+    """
+    ПОПЫТКА самосогласованного (joint/итеративного) МНК откачена — см.
+    docstring модуля наверху файла. Оба варианта (единый решатель с
+    геоид-коррекцией в функции невязки, и итеративное уточнение через
+    несколько обычных МНК подряд) на контрольном тесте сходились к
+    геометрически неверному, но "идеально самосогласованному" решению —
+    даже на сети, где обычный calculate_helmert без геоида восстанавливает
+    истинные параметры с точностью ~1e-9. Причина: _undulation_on_ellipsoid
+    сама по себе — полноценное 3D обратное преобразование Гельмерта, крайне
+    чувствительное к точности параметра, которым её вызывают; если исходная
+    (черновая) оценка параметров уже заметно смещена — а именно так и
+    бывает на сетях с ощутимым градиентом ондуляции, ради которых всё это
+    затевалось — самокоррекция не восстанавливает верный ответ, а
+    стабилизируется на ложном. Это осталось известной, непочиненной
+    проблемой (см. соответствующую задачу в очереди) — safer наивный
+    двухшаговый расчёт ниже.
+    """
     local_crs, wgs84_crs = _split_local_wgs84(source_crs, target_crs)
     naive_params = _naive_local_to_wgs84(
         pairs, source_crs, target_crs, local_crs, wgs84_crs

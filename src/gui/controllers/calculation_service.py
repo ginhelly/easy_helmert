@@ -31,7 +31,6 @@ class CalculationService:
         read_geoid_actions: Callable[[], Tuple[object, object]],
         is_geoid_correction_enabled: Callable[[], bool],
         set_delta_zeta_mean: Callable[[Optional[float]], None],
-        update_results_view: Callable[[CalculationResult], None],
         get_threshold_m: Callable[[], float],
         autofill_missing_coordinates: Callable[[list, CalculationResult, object], int],
         mark_modified: Callable[[str], None],
@@ -43,7 +42,6 @@ class CalculationService:
         self.read_geoid_actions = read_geoid_actions
         self.is_geoid_correction_enabled = is_geoid_correction_enabled
         self.set_delta_zeta_mean = set_delta_zeta_mean
-        self.update_results_view = update_results_view
         self.get_threshold_m = get_threshold_m
         self.autofill_missing_coordinates = autofill_missing_coordinates
         self.mark_modified = mark_modified
@@ -303,7 +301,14 @@ class CalculationService:
             all_residuals[grid_row] = result.residuals[j]
             all_metric[grid_row] = result.residuals_enu[j]
 
-        self.update_results_view(result)
+        # update_results_view() здесь НЕ вызывается: он читает self.calc_result/
+        # self.point_pairs через колбэки (_rms_from_grid и т.п.), а они в
+        # MainFrame обновляются только ПОСЛЕ возврата из run()/run_with_fixed_params() —
+        # вызов отсюда рендерил бы панель результата по ещё не обновлённому
+        # (предыдущему или пустому) состоянию, из-за чего СКО периодически
+        # показывались нулевыми при полностью ненулевых невязках в таблице.
+        # Обновление панели теперь на стороне MainFrame, сразу после того как
+        # оно присваивает calc_result/point_pairs из CalculationRunResult.
 
         filled_cells = self.autofill_missing_coordinates(raw_items, result, geoid_info)
         if filled_cells > 0:
