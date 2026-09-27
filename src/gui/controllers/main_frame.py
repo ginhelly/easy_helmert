@@ -36,6 +36,8 @@ class MainFrame(BaseMainFrame):
         self._current_fixed_params: Optional[TransformationParams] = None
         self._status_default_text: str = ""
 
+        self._load_geoid_undulation_settings()
+
         self._init_ui()
 
         self.import_service = ImportService(
@@ -70,6 +72,10 @@ class MainFrame(BaseMainFrame):
             get_threshold_m=self._get_threshold_m,
             autofill_missing_coordinates=self._autofill_missing_coordinates,
             mark_modified=self._mark_modified,
+            get_geoid_undulation_settings=lambda: (
+                self._app_settings.geoid_undulation_method,
+                self._geoid_trusted_params,
+            ),
         )
 
         self._setup_layout()
@@ -220,6 +226,7 @@ class MainFrame(BaseMainFrame):
         self.Bind(wx.EVT_MENU, self._save_table_to_file, self.m_menuItem_save_table)
         self.Bind(wx.EVT_MENU, self.on_export_calibration, self.m_menuItem_export_calibration)
         self.Bind(wx.EVT_MENU, self.on_about, self.m_menuItem_about)
+        self.Bind(wx.EVT_MENU, self.on_open_settings, self.m_menuItem_settings)
 
         self.Bind(wx.EVT_TOOL, self.on_calculate, self.m_tool_calculate)
         self.Bind(wx.EVT_TOOL, lambda e: self._copy_crs_to_clipboard("wkt1"), self.m_tool_copy_wkt1)
@@ -486,6 +493,11 @@ class MainFrame(BaseMainFrame):
         Читает настройки геоида из UI.
         Возвращает (src_action, tgt_action) — оба GeoidAction.
         Если контролы неактивны — принудительно NOTHING для обоих.
+
+        Радио-боксы m_rb_src_action/m_rb_tgt_action дают выбор всего из
+        двух пунктов ("Ортометрические" / "Геодезические") — SUBTRACT из UI
+        убран (остаётся в самом enum и в логике коррекции), поэтому индекс
+        радио-кнопки маппится на GeoidAction явно, а не приведением типа.
         """
         from core.geoid_correction import GeoidAction, geoid_controls_active
         if not geoid_controls_active(
@@ -493,9 +505,11 @@ class MainFrame(BaseMainFrame):
             getattr(self, "target_crs", None),
         ):
             return GeoidAction.NOTHING, GeoidAction.NOTHING
+
+        index_to_action = (GeoidAction.ADD, GeoidAction.NOTHING)
         return (
-            GeoidAction(self.m_rb_src_action.GetSelection()),
-            GeoidAction(self.m_rb_tgt_action.GetSelection()),
+            index_to_action[self.m_rb_src_action.GetSelection()],
+            index_to_action[self.m_rb_tgt_action.GetSelection()],
         )
 
     def _rms_from_grid(self) -> Optional[float]:
@@ -777,6 +791,60 @@ class MainFrame(BaseMainFrame):
         from gui.dialogs.about_dialog import AboutDialog
         with AboutDialog(self) as dlg:
             dlg.ShowModal()
+
+    def _load_geoid_undulation_settings(self):
+        """
+        Загружает настройку способа расчёта ондуляций геоида
+        (core.app_settings) и, если выбран режим "по заданным параметрам",
+        подтягивает сами параметры из пользовательской БД по сохранённому id.
+        Если пресет с таким id не найден (удалён/БД пуста) — тихо
+        откатывается к NAIVE_FIT, чтобы не падать при старте.
+        """
+        from core.app_settings import load_app_settings
+        from core.geoid_correction import GeoidUndulationMethod
+
+        self._app_settings = load_app_settings()
+        self._geoid_trusted_params: Optional[TransformationParams] = None
+        self._geoid_trusted_preset_name: str = ""
+
+        if (
+            self._app_settings.geoid_undulation_method == GeoidUndulationMethod.TRUSTED_PARAMS
+            and self._app_settings.geoid_trusted_preset_id is not None
+        ):
+            from core.user_transforms_db import list_presets
+            try:
+                preset = next(
+                    (p for p in list_presets() if p.id == self._app_settings.geoid_trusted_preset_id),
+                    None,
+                )
+            except Exception:
+                preset = None
+            if preset is not None and preset.is_supported:
+                self._geoid_trusted_params = preset.to_transformation_params()
+                self._geoid_trusted_preset_name = preset.name
+            else:
+                self._app_settings.geoid_undulation_method = GeoidUndulationMethod.NAIVE_FIT
+                self._app_settings.geoid_trusted_preset_id = None
+
+    def on_open_settings(self, event):
+        from gui.dialogs.geoid_undulation_settings_dialog import GeoidUndulationSettingsDialog
+        from core.app_settings import save_app_settings
+
+        with GeoidUndulationSettingsDialog(
+            self,
+            method=self._app_settings.geoid_undulation_method,
+            preset_id=self._app_settings.geoid_trusted_preset_id,
+            preset_name=self._geoid_trusted_preset_name,
+            preset_params=self._geoid_trusted_params,
+        ) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+
+            self._app_settings.geoid_undulation_method = dlg.get_method()
+            self._app_settings.geoid_trusted_preset_id = dlg.get_preset_id()
+            self._geoid_trusted_params = dlg.get_preset_params()
+            self._geoid_trusted_preset_name = dlg.get_preset_name()
+            save_app_settings(self._app_settings)
 
     def _format_coord_value(self, value: float, crs: CRS, is_height: bool = False) -> str:
         """

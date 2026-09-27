@@ -42,6 +42,7 @@ class TransformPresetPickerDialog(wx.Dialog):
         self._category_node_selected = False                  # выбран узел категории (не пресет)
         self._drag_preset: Optional[TransformPreset] = None
         self._result_params: Optional[TransformationParams] = None
+        self._result_preset_id: Optional[int] = None
         self._search_timer = wx.Timer(self)
 
         self._init_ui()
@@ -419,6 +420,7 @@ class TransformPresetPickerDialog(wx.Dialog):
         if self._selected_preset is None or not self._selected_preset.is_supported:
             return
         self._result_params = self._selected_preset.to_transformation_params()
+        self._result_preset_id = self._selected_preset.id
         self.EndModal(wx.ID_OK)
 
     # ── Публичный API ─────────────────────────────────────────────────────────
@@ -428,3 +430,6 @@ class TransformPresetPickerDialog(wx.Dialog):
 
     def get_preset_name(self) -> str:
         return self._selected_preset.name if self._selected_preset else ""
+
+    def get_preset_id(self) -> Optional[int]:
+        return self._result_preset_id

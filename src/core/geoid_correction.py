@@ -28,8 +28,15 @@ calculate_helmert() без геоида восстанавливает исти�
 стартовая (наивная) оценка параметров уже заметно смещена — то есть именно
 в том случае, ради которого всё и затевалось, — эта самокоррекция не
 восстанавливает верный ответ, а стабилизируется на ложном самосогласованном
-фиксированном значении. Подробности и числа — см. связанную задачу в
-очереди задач проекта.
+фиксированном значении. Подробности и числа — см.
+docs/geoid_naive_fit_investigation.md.
+
+Дальнейшее расследование (следующая сессия) показало, что дело не в
+чувствительности к вращению конкретно, а в принципиальной неразличимости
+"сдвиг датума" vs "неучтённый геоид" по одним лишь координатам сети — см.
+тот же файл. Отсюда и три выбираемых режима ниже (GeoidUndulationMethod) —
+безопасного единственно верного решения нет, поэтому выбор оставлен
+пользователю (диалог "Программа → Настройки").
 """
 from __future__ import annotations
 
@@ -83,6 +90,51 @@ class GeoidAction(IntEnum):
     ADD      = 0   # Прибавить высоту EGM2008
     SUBTRACT = 1   # Вычесть высоту EGM2008
     NOTHING  = 2   # Ничего не делать
+
+
+class GeoidUndulationMethod(IntEnum):
+    """
+    Способ получения ондуляции на нужном эллипсоиде — настройка программы
+    (диалог "Программа → Настройки"), не привязана к конкретному расчёту.
+
+    Ондуляция EGM2008 сэмплируется относительно WGS-84; чтобы применить её
+    к точке в ДРУГОЙ СК (не WGS-84), её нужно как-то перенести на другой
+    эллипсоид. Все три способа ниже — лишь ПРИБЛИЖЕНИЯ с разными компромис-
+    сами; ни один не гарантированно точнее другого — какой ближе к тому,
+    что ожидает конкретная внешняя программа (принимающая потом эти же 7
+    параметров), зависит от случая. Подробности расследования — в
+    docs/geoid_naive_fit_investigation.md.
+
+    NAIVE_FIT (по умолчанию, исходное поведение):
+        Черновые параметры local → WGS-84 считаются по некорректированным
+        высотам самой этой сети (систематически смещены — см. docstring
+        модуля), и ими же полным обратным Гельмертом (через
+        _undulation_on_ellipsoid) ондуляция переносится на нужный эллипсоид.
+        Проблема: если черновые параметры уже сами "впитали" геоидный
+        сигнал (типично, если высоты не были заранее скорректированы), тот
+        же сигнал потом вычитается обратно тем же преобразованием —
+        коррекция гасит сама себя почти полностью (проверено синтетическим
+        тестом: на сети 21×7.5 км ондуляция ~40 м схлопывается до ~0.01 м).
+
+    TRUSTED_PARAMS:
+        Тот же обратный Гельмерт, но параметры берутся НЕ из подгонки по
+        этой сети, а из заранее выбранного набора в пользовательской БД
+        (см. core/user_transforms_db.py) — например, официальных ГОСТ-
+        параметров для этого датума. Раз параметры не выводятся из тех же
+        точек, которые потом корректируются, самопогашения не возникает —
+        та же логика, что уже используется в apply_helmert_with_geoid() для
+        параметров, заданных извне.
+
+    RAW_AS_IS:
+        Ондуляция на WGS-84 принимается напрямую за ондуляцию на нужном
+        эллипсоиде, без всякого пересчёта. Не физически точно (эллипсоиды
+        реально отличаются по высоте на величину сдвига датума — от единиц
+        до десятков метров), но предсказуемо и не зависит от качества
+        черновых параметров вообще.
+    """
+    NAIVE_FIT      = 0
+    TRUSTED_PARAMS = 1
+    RAW_AS_IS      = 2
 
 
 def table_to_calc(h, action, n_eff):
@@ -489,21 +541,27 @@ def _apply_geoid(
 
 
 def _correct_heights_for_geoid(
-    pairs:            List[PointPair],
-    source_crs:       CRS,
-    target_crs:       CRS,
-    local_crs:        CRS,
-    wgs84_crs:        CRS,
-    naive_params:     TransformationParams,   # local -> WGS-84
-    src_action:       GeoidAction,
-    tgt_action:       GeoidAction,
-    apply_correction: bool,
+    pairs:              List[PointPair],
+    source_crs:         CRS,
+    target_crs:         CRS,
+    local_crs:          CRS,
+    wgs84_crs:          CRS,
+    naive_params:       TransformationParams,   # local -> WGS-84
+    src_action:         GeoidAction,
+    tgt_action:         GeoidAction,
+    apply_correction:   bool,
+    skip_reprojection:  bool = False,
 ) -> Tuple[List[PointPair], GeoidCorrectionInfo]:
     """
     Общая часть calculate_helmert_with_geoid()/apply_helmert_with_geoid():
     сэмплирует EGM2008, считает поправку Балтика<->EGM2008 и применяет её
     к высотам точек. naive_params нужен только чтобы перевести точки в
     WGS-84 для выборки геоида — не влияет на финальный расчёт параметров.
+
+    skip_reprojection=True — реализация GeoidUndulationMethod.RAW_AS_IS:
+    сырая ондуляция на WGS-84 берётся как есть, без обратного Гельмерта на
+    нужный эллипсоид (naive_params в этом случае используется только чтобы
+    получить lon/lat точек для выборки растра).
     """
     geoid_path = _find_geoid_path()
 
@@ -525,7 +583,7 @@ def _correct_heights_for_geoid(
             source_crs, local_crs, wgs84_crs, naive_params,
         )
         n_wgs_src = _sample_egm2008(lons_src, lats_src, geoid_path)
-        n_src     = _undulation_on_ellipsoid(
+        n_src     = n_wgs_src.copy() if skip_reprojection else _undulation_on_ellipsoid(
             lons_src, lats_src, n_wgs_src, source_crs, naive_params
         )
         # DEBUG: полностью самостоятельный расчёт по жёстко заданным
@@ -553,7 +611,7 @@ def _correct_heights_for_geoid(
             target_crs, local_crs, wgs84_crs, naive_params,
         )
         n_wgs_tgt = _sample_egm2008(lons_tgt, lats_tgt, geoid_path)
-        n_tgt_arr = _undulation_on_ellipsoid(
+        n_tgt_arr = n_wgs_tgt.copy() if skip_reprojection else _undulation_on_ellipsoid(
             lons_tgt, lats_tgt, n_wgs_tgt, target_crs, naive_params
         )
         # DEBUG: см. комментарий у n_src_global выше — тот же принцип,
@@ -659,62 +717,79 @@ def _correct_heights_for_geoid(
 # ── Публичный API ─────────────────────────────────────────────────────────────
 
 def calculate_helmert_with_geoid(
-    pairs:            List[PointPair],
-    source_crs:       CRS,
-    target_crs:       CRS,
-    src_action:       GeoidAction,
-    tgt_action:       GeoidAction,
-    apply_correction: bool = False,
+    pairs:              List[PointPair],
+    source_crs:         CRS,
+    target_crs:         CRS,
+    src_action:         GeoidAction,
+    tgt_action:         GeoidAction,
+    apply_correction:      bool = False,
+    undulation_method:     GeoidUndulationMethod = GeoidUndulationMethod.NAIVE_FIT,
+    trusted_params:        Optional[TransformationParams] = None,
 ) -> Tuple[CalculationResult, GeoidCorrectionInfo]:
     """
     ПОПЫТКА самосогласованного (joint/итеративного) МНК откачена — см.
-    docstring модуля наверху файла. Оба варианта (единый решатель с
+    docstring модуля наверху файла: оба варианта (единый решатель с
     геоид-коррекцией в функции невязки, и итеративное уточнение через
     несколько обычных МНК подряд) на контрольном тесте сходились к
     геометрически неверному, но "идеально самосогласованному" решению —
     даже на сети, где обычный calculate_helmert без геоида восстанавливает
-    истинные параметры с точностью ~1e-9. Причина: _undulation_on_ellipsoid
-    сама по себе — полноценное 3D обратное преобразование Гельмерта, крайне
-    чувствительное к точности параметра, которым её вызывают; если исходная
-    (черновая) оценка параметров уже заметно смещена — а именно так и
-    бывает на сетях с ощутимым градиентом ондуляции, ради которых всё это
-    затевалось — самокоррекция не восстанавливает верный ответ, а
-    стабилизируется на ложном. Это осталось известной, непочиненной
-    проблемой (см. соответствующую задачу в очереди) — safer наивный
-    двухшаговый расчёт ниже.
+    истинные параметры с точностью ~1e-9.
+
+    undulation_method — см. GeoidUndulationMethod (там же — почему выбор
+    оставлен пользователю, а не решён автоматически). При TRUSTED_PARAMS
+    нужно также передать trusted_params (набор из пользовательской БД); при
+    остальных режимах trusted_params не используется.
     """
     local_crs, wgs84_crs = _split_local_wgs84(source_crs, target_crs)
-    naive_params = _naive_local_to_wgs84(
-        pairs, source_crs, target_crs, local_crs, wgs84_crs
-    )
+
+    if undulation_method == GeoidUndulationMethod.TRUSTED_PARAMS:
+        if trusted_params is None:
+            raise ValueError(
+                "GeoidUndulationMethod.TRUSTED_PARAMS требует набор параметров "
+                "(trusted_params) — выберите его в настройках программы."
+            )
+        naive_params = (
+            trusted_params if crs_is_wgs84_related(target_crs)
+            else trusted_params.inverted()
+        )
+    else:
+        naive_params = _naive_local_to_wgs84(
+            pairs, source_crs, target_crs, local_crs, wgs84_crs
+        )
+
     corrected, geoid_info = _correct_heights_for_geoid(
         pairs, source_crs, target_crs, local_crs, wgs84_crs,
         naive_params, src_action, tgt_action, apply_correction,
+        skip_reprojection=(undulation_method == GeoidUndulationMethod.RAW_AS_IS),
     )
     result = calculate_helmert(corrected, source_crs, target_crs)
     return result, geoid_info
 
 
 def apply_helmert_with_geoid(
-    pairs:            List[PointPair],
-    source_crs:       CRS,
-    target_crs:       CRS,
-    params:           TransformationParams,
-    src_action:       GeoidAction,
-    tgt_action:       GeoidAction,
-    apply_correction: bool = False,
+    pairs:              List[PointPair],
+    source_crs:         CRS,
+    target_crs:         CRS,
+    params:             TransformationParams,
+    src_action:         GeoidAction,
+    tgt_action:         GeoidAction,
+    apply_correction:   bool = False,
+    undulation_method:  GeoidUndulationMethod = GeoidUndulationMethod.NAIVE_FIT,
 ) -> Tuple[CalculationResult, GeoidCorrectionInfo]:
     """
     Как calculate_helmert_with_geoid(), но параметры заданы извне (импорт /
     пользовательская БД), без МНК на финальном шаге. naive_params для выборки
     геоида берётся из уже готовых params (при необходимости — приближённо
-    инвертированных), а не из отдельной подгонки по точкам.
+    инвертированных), а не из отдельной подгонки по точкам — поэтому здесь
+    NAIVE_FIT и TRUSTED_PARAMS эквивалентны (params и так уже "доверенные",
+    самоподгонки нет в принципе); осмысленный выбор — только RAW_AS_IS.
     """
     local_crs, wgs84_crs = _split_local_wgs84(source_crs, target_crs)
     naive_params = params if crs_is_wgs84_related(target_crs) else params.inverted()
     corrected, geoid_info = _correct_heights_for_geoid(
         pairs, source_crs, target_crs, local_crs, wgs84_crs,
         naive_params, src_action, tgt_action, apply_correction,
+        skip_reprojection=(undulation_method == GeoidUndulationMethod.RAW_AS_IS),
     )
     result = apply_helmert(corrected, source_crs, target_crs, params)
     return result, geoid_info

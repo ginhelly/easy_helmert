@@ -34,6 +34,7 @@ class CalculationService:
         get_threshold_m: Callable[[], float],
         autofill_missing_coordinates: Callable[[list, CalculationResult, object], int],
         mark_modified: Callable[[str], None],
+        get_geoid_undulation_settings: Callable[[], Tuple[object, Optional[TransformationParams]]],
     ):
         self.parent = parent
         self.coord_grid = coord_grid
@@ -45,6 +46,7 @@ class CalculationService:
         self.get_threshold_m = get_threshold_m
         self.autofill_missing_coordinates = autofill_missing_coordinates
         self.mark_modified = mark_modified
+        self.get_geoid_undulation_settings = get_geoid_undulation_settings
 
         # state, который раньше жил в MainFrame
         self.last_all_residuals = []
@@ -139,6 +141,7 @@ class CalculationService:
 
         src_action, tgt_action = self.read_geoid_actions()
         apply_correction = self.is_geoid_correction_enabled()
+        undulation_method, trusted_params = self.get_geoid_undulation_settings()
 
         try:
             if geoid_needed(src_action, tgt_action):
@@ -149,6 +152,8 @@ class CalculationService:
                     src_action,
                     tgt_action,
                     apply_correction=apply_correction,
+                    undulation_method=undulation_method,
+                    trusted_params=trusted_params,
                 )
 
                 if len(geoid_info.src) != len(valid_items) or len(geoid_info.tgt) != len(valid_items):
@@ -239,6 +244,7 @@ class CalculationService:
 
         src_action, tgt_action = self.read_geoid_actions()
         apply_correction = self.is_geoid_correction_enabled()
+        undulation_method, _trusted_params = self.get_geoid_undulation_settings()
 
         geoid_info = None
         try:
@@ -251,6 +257,7 @@ class CalculationService:
                     src_action,
                     tgt_action,
                     apply_correction=apply_correction,
+                    undulation_method=undulation_method,
                 )
 
                 if len(geoid_info.src) != len(valid_items) or len(geoid_info.tgt) != len(valid_items):
