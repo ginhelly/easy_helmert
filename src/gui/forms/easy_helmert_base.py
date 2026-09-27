@@ -95,6 +95,10 @@ class BaseMainFrame ( wx.Frame ):
         self.m_menubar1.Append( self.m_menu3, u"Вычисленные параметры" )
 
         self.m_menu2 = wx.Menu()
+        self.m_menuItem_settings = wx.MenuItem( self.m_menu2, wx.ID_ANY, u"Настройки...", wx.EmptyString, wx.ITEM_NORMAL )
+        self.m_menuItem_settings.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_HELP_SETTINGS,  ) )
+        self.m_menu2.Append( self.m_menuItem_settings )
+
         self.m_menuItem_about = wx.MenuItem( self.m_menu2, wx.ID_ANY, u"О программе", wx.EmptyString, wx.ITEM_NORMAL )
         self.m_menuItem_about.SetBitmap( wx.ArtProvider.GetBitmap( wx.ART_HELP_PAGE,  ) )
         self.m_menu2.Append( self.m_menuItem_about )
@@ -276,14 +280,14 @@ class BaseMainFrame ( wx.Frame ):
 
         bSizer45 = wx.BoxSizer( wx.HORIZONTAL )
 
-        m_rb_src_actionChoices = [ u"Прибавить высоту EGM2008", u"Вычесть высоту EGM2008", u"Ничего не делать" ]
-        self.m_rb_src_action = wx.RadioBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Для точек в исходной СК:", wx.DefaultPosition, wx.DefaultSize, m_rb_src_actionChoices, 1, wx.RA_SPECIFY_COLS )
-        self.m_rb_src_action.SetSelection( 2 )
+        m_rb_src_actionChoices = [ u"Ортометрические", u"Геодезические" ]
+        self.m_rb_src_action = wx.RadioBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Высоты в исходной СК:", wx.DefaultPosition, wx.DefaultSize, m_rb_src_actionChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_src_action.SetSelection( 1 )
         bSizer45.Add( self.m_rb_src_action, 1, wx.ALL, 5 )
 
-        m_rb_tgt_actionChoices = [ u"Прибавить высоту EGM2008", u"Вычесть высоту EGM2008", u"Ничего не делать" ]
-        self.m_rb_tgt_action = wx.RadioBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Для точек в опорной СК:", wx.DefaultPosition, wx.DefaultSize, m_rb_tgt_actionChoices, 1, wx.RA_SPECIFY_COLS )
-        self.m_rb_tgt_action.SetSelection( 2 )
+        m_rb_tgt_actionChoices = [ u"Ортометрические", u"Геодезические" ]
+        self.m_rb_tgt_action = wx.RadioBox( self.m_scrolledWindow_settings, wx.ID_ANY, u"Высоты в опорной СК:", wx.DefaultPosition, wx.DefaultSize, m_rb_tgt_actionChoices, 1, wx.RA_SPECIFY_COLS )
+        self.m_rb_tgt_action.SetSelection( 1 )
         bSizer45.Add( self.m_rb_tgt_action, 1, wx.ALL, 5 )
 
 
